@@ -1,0 +1,15 @@
+if TARGET_MX7ULPEA_UCOM
+
+config SYS_BOARD
+	default "mx7ulpea-ucom"
+
+config SYS_VENDOR
+	default "embeddedartists"
+
+config SYS_CONFIG_NAME
+	default "mx7ulpea-ucom"
+
+config IMX_CONFIG
+	default "board/embeddedartists/mx7ulpea-ucom/imximage.cfg"
+
+endif
