@@ -1010,9 +1010,9 @@ dtb-$(CONFIG_ARCH_IMX8M) += \
 	imx8mq-ea-com-kit_v2.dtb \
 	imx8mm-ea-ucom-kit_v2.dtb \
 	imx8mn-ea-ucom-kit_v2.dtb \
-	imx8mm-influx-redge \
-	imx8mm-influx-redge-1mw \
-	imx8mm-influx-redge-m4
+	imx8mm-influx-redge.dtb \
+	imx8mm-influx-redge-1mw.dtb \
+	imx8mm-influx-redge-m4.dtb
 
 dtb-$(CONFIG_ARCH_IMXRT) += imxrt1050-evk.dtb \
 	imxrt1020-evk.dtb
