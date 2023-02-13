@@ -1009,7 +1009,10 @@ dtb-$(CONFIG_ARCH_IMX8M) += \
 	imx8mq-kontron-pitx-imx8m.dtb \
 	imx8mq-ea-com-kit_v2.dtb \
 	imx8mm-ea-ucom-kit_v2.dtb \
-	imx8mn-ea-ucom-kit_v2.dtb
+	imx8mn-ea-ucom-kit_v2.dtb \
+	imx8mm-influx-redge \
+	imx8mm-influx-redge-1mw \
+	imx8mm-influx-redge-m4
 
 dtb-$(CONFIG_ARCH_IMXRT) += imxrt1050-evk.dtb \
 	imxrt1020-evk.dtb
