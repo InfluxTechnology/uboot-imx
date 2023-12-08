@@ -53,7 +53,6 @@
 		pinctrl_hog_1: hoggrp-1 {
 			fsl,pins = <
 				MX8MN_IOMUXC_GPIO1_IO08_GPIO1_IO8		0x16
-                                MX8MM_IOMUXC_GPIO1_IO0_GPIO1_IO0                0x19
 			>;
 		};
 
