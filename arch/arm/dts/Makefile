@@ -1084,7 +1084,9 @@ dtb-$(CONFIG_ARCH_IMX8M) += \
 	imx8mq-kontron-pitx-imx8m.dtb \
 	imx8mq-librem5-r4.dtb \
 	imx8mm-ea-ucom-kit_v2.dtb \
-	imx8mn-ea-ucom-kit_v2.dtb
+	imx8mn-ea-ucom-kit_v2.dtb \
+    imx8mm-influx-rex-smart_v2.dtb \
+    imx8mn-influx-rex-smart_v2.dtb 
 
 dtb-$(CONFIG_ARCH_IMX9) += \
 	imx93-11x11-evk.dtb \

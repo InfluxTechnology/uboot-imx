@@ -460,6 +460,18 @@ config TARGET_MX8MNEA_UCOM
 	select SUPPORT_SPL
 	select IMX8M_DDR4
 
+config TARGET_MX8MM_INFLUX
+	bool "mx8mm-influx-rex-smart"
+	select IMX8MM
+	select SUPPORT_SPL
+	select IMX8M_LPDDR4
+
+config TARGET_MX8MN_INFLUX
+	bool "mx8mn-influx-rex-smart"
+	select IMX8MN
+	select SUPPORT_SPL
+	select IMX8M_DDR4
+
 endchoice
 
 source "board/advantech/imx8mp_rsb3720a1/Kconfig"
@@ -495,5 +507,7 @@ source "board/toradex/verdin-imx8mm/Kconfig"
 source "board/toradex/verdin-imx8mp/Kconfig"
 source "board/embeddedartists/mx8mmea-ucom/Kconfig"
 source "board/embeddedartists/mx8mnea-ucom/Kconfig"
+source "board/influxtechnology/mx8mm-influx-rex-smart/Kconfig"
+source "board/influxtechnology/mx8mn-influx-rex-smart/Kconfig"
 
 endif
