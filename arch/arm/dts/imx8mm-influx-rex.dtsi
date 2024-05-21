@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Embedded Artists AB
+ * Copyright 2024 Influx Technology 
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -18,7 +18,7 @@
 
 / {
 		model = "Influx Technology i.MX8MM Rexgen Smart";
-        compatible = "fsl,imx8mm-rexgen-smart", "fsl,imx8mm"
+        compatible = "fsl,imx8mm-rexgen-smart", "fsl,imx8mm";
 };
 
 &iomuxc {
