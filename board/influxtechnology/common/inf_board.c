@@ -7,15 +7,15 @@
 #include <env.h>
 #include "inf_eeprom.h"
 
-static char ea_board_part[9];
-static char ea_board_batch[9];
+static char inf_board_part[9];
+static char inf_board_batch[9];
 
-int ea_print_board(void)
+int inf_print_board(void)
 {
-	ea_eeprom_config_t config;
+	inf_eeprom_config_t config;
 
 	printf("Board: Influx Technology ");
-	if (ea_eeprom_get_config(&config) == 0) {
+	if (inf_eeprom_get_config(&config) == 0) {
 
 		printf("%s\n", config.name);
 		printf("       %05d, %s, WO%d\n",
@@ -30,16 +30,16 @@ int ea_print_board(void)
 	return 0;
 }
 
-int ea_board_info_to_env(void)
+int inf_board_info_to_env(void)
 {
-	ea_eeprom_config_t config;
+	inf_eeprom_config_t config;
 
-	if (ea_eeprom_get_config(&config) == 0) {
+	if (inf_eeprom_get_config(&config) == 0) {
 
-		sprintf(ea_board_part, "%d", config.board_part_nr);
-		env_set("board_part", ea_board_part);
-		sprintf(ea_board_batch, "%d", config.batch);
-		env_set("board_batch", ea_board_batch);
+		sprintf(inf_board_part, "%d", config.board_part_nr);
+		env_set("board_part", inf_board_part);
+		sprintf(inf_board_batch, "%d", config.batch);
+		env_set("board_batch", inf_board_batch);
 		env_set("board_rev", (const char*)config.board_rev);
 		env_save();
 	}

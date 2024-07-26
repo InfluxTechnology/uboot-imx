@@ -9,12 +9,12 @@
 #include "inf_eeprom.h"
 #include <net.h>
 
-int ea_load_ethaddr(void)
+int inf_load_ethaddr(void)
 {
-	ea_eeprom_config_t config;
+	inf_eeprom_config_t config;
 
 	/* stored MAC addresses to env variables */
-	if (ea_eeprom_get_config(&config) == 0) {
+	if (inf_eeprom_get_config(&config) == 0) {
 
 		if (is_valid_ethaddr(config.mac1) && !env_get("ethaddr")) {
 			eth_env_set_enetaddr("ethaddr", config.mac1);

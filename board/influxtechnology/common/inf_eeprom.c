@@ -16,21 +16,21 @@
 #include "inf_eeprom.h"
 
 #ifdef CONFIG_DM_I2C
-static int ea_dm_i2c_init(struct udevice **i2c_dev)
+static int inf_dm_i2c_init(struct udevice **i2c_dev)
 {
 	struct udevice *bus;
         int ret;
 
-        ret = uclass_get_device_by_seq(UCLASS_I2C, EA_EEPROM_I2C_BUS, &bus);
+        ret = uclass_get_device_by_seq(UCLASS_I2C, INF_EEPROM_I2C_BUS, &bus);
         if (ret) {
                 printf("%s: Can't find bus\n", __func__);
                 return -EINVAL;
         }
 
-        ret = dm_i2c_probe(bus, EA_EEPROM_I2C_SLAVE, 0, i2c_dev);
+        ret = dm_i2c_probe(bus, INF_EEPROM_I2C_SLAVE, 0, i2c_dev);
         if (ret) {
                 printf("%s: Can't find device id=0x%x\n",
-                        __func__, EA_EEPROM_I2C_SLAVE);
+                        __func__, INF_EEPROM_I2C_SLAVE);
                 return -ENODEV;
         }
 
@@ -40,31 +40,31 @@ static int ea_dm_i2c_init(struct udevice **i2c_dev)
 #endif
 
 
-int ea_eeprom_init(void)
+int inf_eeprom_init(void)
 {
 #if !defined(CONFIG_DM_I2C)
-	i2c_set_bus_num(EA_EEPROM_I2C_BUS);
-	i2c_init(CONFIG_SYS_I2C_SPEED, EA_EEPROM_I2C_SLAVE);
+	i2c_set_bus_num(INF_EEPROM_I2C_BUS);
+	i2c_init(CONFIG_SYS_I2C_SPEED, INF_EEPROM_I2C_SLAVE);
 #endif
 
 	return 0;
 }
 
-int ea_eeprom_get_config(ea_eeprom_config_t* config)
+int inf_eeprom_get_config(inf_eeprom_config_t* config)
 {
 #if !defined(CONFIG_DM_I2C)
 
-	i2c_set_bus_num(EA_EEPROM_I2C_BUS);
+	i2c_set_bus_num(INF_EEPROM_I2C_BUS);
 
-	if (i2c_probe(EA_EEPROM_I2C_SLAVE)) {
+	if (i2c_probe(inf_EEPROM_I2C_SLAVE)) {
 		return -ENODEV;
 	}
 
-	if (i2c_read(EA_EEPROM_I2C_SLAVE,
+	if (i2c_read(INF_EEPROM_I2C_SLAVE,
 		0,
 		2,
 		(uint8_t *)config,
-		sizeof(ea_eeprom_config_t)))
+		sizeof(inf_eeprom_config_t)))
 	{
 		return -EIO;
 	}
@@ -72,12 +72,12 @@ int ea_eeprom_get_config(ea_eeprom_config_t* config)
 	struct udevice *i2c_dev = NULL;
 	int ret;
 
-	ret = ea_dm_i2c_init(&i2c_dev);
+	ret = inf_dm_i2c_init(&i2c_dev);
 	if (ret) {
 		return ret;
 	}
 
-        ret = dm_i2c_read(i2c_dev, 0, (uint8_t *)config, sizeof(ea_eeprom_config_t));
+        ret = dm_i2c_read(i2c_dev, 0, (uint8_t *)config, sizeof(inf_eeprom_config_t));
         if (ret) {
                 printf("%s dm_i2c_read failed, err %d\n", __func__, ret);
                 return -EIO;
@@ -85,13 +85,13 @@ int ea_eeprom_get_config(ea_eeprom_config_t* config)
 
 #endif
 
-	if (config->magic != EA_EEPROM_MAGIC) {
-		printf("EA config: invalid magic number\n");
+	if (config->magic != INF_EEPROM_MAGIC) {
+		printf("INF config: invalid magic number\n");
 		return -EINVAL;
 	}
 
-	if (config->version > EA_EEPROM_CFG_VERSION) {
-		printf("EA config: Unsupported config version (%d != %d)\n",
+	if (config->version > INF_EEPROM_CFG_VERSION) {
+		printf("INF config: Unsupported config version (%d != %d)\n",
 			config->version, EA_EEPROM_CFG_VERSION);
 		return -EINVAL;
 	}
@@ -99,13 +99,13 @@ int ea_eeprom_get_config(ea_eeprom_config_t* config)
 	return 0;
 }
 
-int ea_eeprom_ddr_cfg_init(ea_ddr_cfg_t *cfg)
+int inf_eeprom_ddr_cfg_init(inf_ddr_cfg_t *cfg)
 {
-	ea_eeprom_config_t config;
+	inf_eeprom_config_t config;
 	int ret = 0;
 
-	ea_eeprom_init();
-	ret = ea_eeprom_get_config(&config);
+	inf_eeprom_init();
+	ret = inf_eeprom_get_config(&config);
 	if (!ret) {
 		cfg->num_pairs = config.data_size;
 		cfg->next = 0;
@@ -115,7 +115,7 @@ int ea_eeprom_ddr_cfg_init(ea_ddr_cfg_t *cfg)
 	return ret;
 }
 
-int ea_eeprom_ddr_cfg_read(ea_ddr_cfg_t *cfg, ea_ddr_cfg_pair_t* pairs,
+int inf_eeprom_ddr_cfg_read(inf_ddr_cfg_t *cfg, inf_ddr_cfg_pair_t* pairs,
 	int num, int *num_read)
 {
 	int to_read;
@@ -124,7 +124,7 @@ int ea_eeprom_ddr_cfg_read(ea_ddr_cfg_t *cfg, ea_ddr_cfg_pair_t* pairs,
 	int ret;
 	struct udevice *i2c_dev = NULL;
 
-        ret = ea_dm_i2c_init(&i2c_dev);
+        ret = inf_dm_i2c_init(&i2c_dev);
         if (ret) {
                 return ret;
         }
@@ -144,20 +144,20 @@ int ea_eeprom_ddr_cfg_read(ea_ddr_cfg_t *cfg, ea_ddr_cfg_pair_t* pairs,
 
 
 #if !defined(CONFIG_DM_I2C)
-	ea_eeprom_init();
-	if (i2c_read(EA_EEPROM_I2C_SLAVE,
-		sizeof(ea_eeprom_config_t)+cfg->next*sizeof(ea_ddr_cfg_pair_t),
+	inf_eeprom_init();
+	if (i2c_read(INF_EEPROM_I2C_SLAVE,
+		sizeof(inf_eeprom_config_t)+cfg->next*sizeof(INF_ddr_cfg_pair_t),
 		2,
 		(uint8_t *)pairs,
-		to_read*sizeof(ea_ddr_cfg_pair_t)))
+		to_read*sizeof(inf_ddr_cfg_pair_t)))
 	{
 		return -EIO;
 	}
 #else
 	ret = dm_i2c_read(i2c_dev,
-		sizeof(ea_eeprom_config_t)+cfg->next*sizeof(ea_ddr_cfg_pair_t),
+		sizeof(inf_eeprom_config_t)+cfg->next*sizeof(inf_ddr_cfg_pair_t),
 		(uint8_t *)pairs,
-		to_read*sizeof(ea_ddr_cfg_pair_t));
+		to_read*sizeof(inf_ddr_cfg_pair_t));
 	if (ret) {
 		printf("%s dm_i2c_read failed, err %d\n", __func__, ret);
 		return -EIO;
@@ -170,7 +170,7 @@ int ea_eeprom_ddr_cfg_read(ea_ddr_cfg_t *cfg, ea_ddr_cfg_pair_t* pairs,
 	return 0;
 }
 
-int ea_eeprom_read_all_data(uint8_t* buf, int buf_sz, int *read)
+int inf_eeprom_read_all_data(uint8_t* buf, int buf_sz, int *read)
 {
 #define MAX_BLOCK_LEN (100)
 	int to_read;
@@ -178,17 +178,17 @@ int ea_eeprom_read_all_data(uint8_t* buf, int buf_sz, int *read)
 	int bytes_read = 0;
 #endif
 
-        ea_eeprom_config_t config;
+        inf_eeprom_config_t config;
         int ret = 0;
 
-        ea_eeprom_init();
-        ret = ea_eeprom_get_config(&config);
+        inf_eeprom_init();
+        ret = inf_eeprom_get_config(&config);
         if (ret) return ret;
 
 #ifdef CONFIG_DM_I2C
 	struct udevice *i2c_dev = NULL;
 
-        ret = ea_dm_i2c_init(&i2c_dev);
+        ret = inf_dm_i2c_init(&i2c_dev);
         if (ret) return ret;
 
 #endif
@@ -201,8 +201,8 @@ int ea_eeprom_read_all_data(uint8_t* buf, int buf_sz, int *read)
 
 #if !defined(CONFIG_DM_I2C)
 
-	if (i2c_read(EA_EEPROM_I2C_SLAVE,
-		sizeof(ea_eeprom_config_t),
+	if (i2c_read(INF_EEPROM_I2C_SLAVE,
+		sizeof(inf_eeprom_config_t),
 		2,
 		buf,
 		to_read))
@@ -219,7 +219,7 @@ int ea_eeprom_read_all_data(uint8_t* buf, int buf_sz, int *read)
 		int bytes_to_read = remaining > MAX_BLOCK_LEN ? MAX_BLOCK_LEN : remaining;
 
 		ret = dm_i2c_read(i2c_dev,
-			sizeof(ea_eeprom_config_t)+bytes_read,
+			sizeof(inf_eeprom_config_t)+bytes_read,
 			buf + bytes_read,
 			bytes_to_read);
 		if (ret) {
@@ -233,7 +233,7 @@ int ea_eeprom_read_all_data(uint8_t* buf, int buf_sz, int *read)
 #else
 
 	ret = dm_i2c_read(i2c_dev,
-		sizeof(ea_eeprom_config_t),
+		sizeof(inf_eeprom_config_t),
 		buf,
 		to_read);
 	if (ret) {

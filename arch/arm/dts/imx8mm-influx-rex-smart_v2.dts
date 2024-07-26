@@ -18,7 +18,7 @@
 
 / {
 		model = "Influx Technology i.MX8MM Rexgen Smart";
-        compatible = "fsl,imx8mm-rexgen-smart", "fsl,imx8mm";
+        compatible = "fsl,imx8mm-influx-rex-smart", "fsl,imx8mm";
 
 	chosen {
 		bootargs = "console=ttymxc1,115200 earlycon=ec_imx6q,0x30890000,115200";
@@ -397,7 +397,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog_1>;
 
-	imx8mmea-ucom {
+	imx8mm-influx-rex-smart {
 		pinctrl_hog_1: hoggrp-1 {
 			fsl,pins = <
 				MX8MM_IOMUXC_GPIO1_IO08_GPIO1_IO8		0x19

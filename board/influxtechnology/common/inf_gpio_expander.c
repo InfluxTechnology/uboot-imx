@@ -81,7 +81,7 @@ static int gpio_exp_configure(int i2c_bus, int i2c_addr, unsigned char* data)
 	return 0;
 }
 
-int ea_get_carrier_board_version(int i2c_bus)
+int inf_get_carrier_board_version(int i2c_bus)
 {
 #if !defined(CONFIG_DM_I2C)
 	i2c_set_bus_num(i2c_bus);
@@ -121,22 +121,22 @@ int ea_get_carrier_board_version(int i2c_bus)
 }
 
 
-bool ea_is_carrier_v2(int i2c_bus)
+bool inf_is_carrier_v2(int i2c_bus)
 {
-	return ea_get_carrier_board_version(i2c_bus)==2;
+	return inf_get_carrier_board_version(i2c_bus)==2;
 }
 
-bool ea_is_carrier_v3(int i2c_bus)
+bool inf_is_carrier_v3(int i2c_bus)
 {
-	return ea_get_carrier_board_version(i2c_bus)==3;
+	return inf_get_carrier_board_version(i2c_bus)==3;
 }
 
-int ea_gpio_exp_configure(int i2c_bus)
+int inf_gpio_exp_configure(int i2c_bus)
 {
 	// All pins as outputs, LOW
 	unsigned char settings[4] = {0,0,0,0};
 
-	int v = ea_get_carrier_board_version(i2c_bus);
+	int v = inf_get_carrier_board_version(i2c_bus);
 	if (v == 2) {
 		return gpio_exp_configure(i2c_bus, PCA6416_ADDR_V2, settings);
 	} else if (v == 3) {

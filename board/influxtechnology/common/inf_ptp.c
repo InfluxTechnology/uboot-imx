@@ -12,7 +12,7 @@
 /*
  * Configure the TFP410 chip on the iMX PTP board.
  */
-int ea_configure_tfp410(void)
+int inf_configure_tfp410(void)
 {
 	int ret;
 	struct udevice *bus;

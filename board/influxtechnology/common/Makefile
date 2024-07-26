@@ -13,5 +13,5 @@ obj-y  += inf_gpio_expander.o
 obj-y  += mmc.o
 obj-y  += inf_board.o
 
-obj-$(CONFIG_EA_IMX_PTP)	+= ea_ptp.o
+obj-$(CONFIG_INF_IMX_PTP)	+= inf_ptp.o
 

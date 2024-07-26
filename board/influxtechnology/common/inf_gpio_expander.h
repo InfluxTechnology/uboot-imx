@@ -4,13 +4,13 @@
  * SPDX-License-Identifier:	GPL-2.0+
  */
 
-#ifndef __EA_GPIO_EXPANDER_H
-#define __EA_GPIO_EXPANDER_H
+#ifndef __INF_GPIO_EXPANDER_H
+#define __INF_GPIO_EXPANDER_H
 
-int ea_gpio_exp_configure(int i2c_bus);
-int ea_get_carrier_board_version(int i2c_bus);
-bool ea_is_carrier_v2(int i2c_bus);
-bool ea_is_carrier_v3(int i2c_bus);
+int inf_gpio_exp_configure(int i2c_bus);
+int inf_get_carrier_board_version(int i2c_bus);
+bool inf_is_carrier_v2(int i2c_bus);
+bool inf_is_carrier_v3(int i2c_bus);
 
 #endif
 

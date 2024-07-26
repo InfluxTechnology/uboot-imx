@@ -56,13 +56,13 @@ int board_early_init_f(void)
 
 int board_phys_sdram_size(phys_size_t *size)
 {
-	ea_config_t *ea_conf = (ea_config_t *)EA_SHARED_CONFIG_MEM;
+	inf_config_t *inf_conf = (inf_config_t *)INF_SHARED_CONFIG_MEM;
 
 	/* default size from configuration file */
 	*size = PHYS_SDRAM_SIZE;
 
-	if (ea_conf->magic == EA_CONFIG_MAGIC) {
-		*size = (ea_conf->ddr_size << 20);
+	if (inf_conf->magic == INF_CONFIG_MAGIC) {
+		*size = (inf_conf->ddr_size << 20);
 	}
 
 	return 0;
@@ -155,7 +155,7 @@ int board_init(void)
 	arm_smccc_smc(IMX_SIP_GPC, IMX_SIP_GPC_PM_DOMAIN,
 		      MIPI, true, 0, 0, 0, 0, &res);
 
-	ea_print_board();
+	inf_print_board();
 
 	return 0;
 }
@@ -174,7 +174,7 @@ int board_late_init(void)
 	 * since they update the environment (env_set). The
 	 * environment isn't loaded and ready at board_init.
 	 */
-	if (ea_load_ethaddr()) {
+	if (inf_load_ethaddr()) {
 		printf("Failed to load MAC addresses\n");
 	}
 #endif
@@ -187,12 +187,12 @@ int board_late_init(void)
 	 */
 	fdt_file = env_get("fdt_file");
 	if (fdt_file == NULL || strlen(fdt_file) == 0) {
-		carrier_version = ea_get_carrier_board_version(1);
+		carrier_version = inf_get_carrier_board_version(1);
 		if (carrier_version == 3) {
-			fdt_file = "imx8mn-ea-ucom-kit_v3.dtb";
+			fdt_file = "imx8mn-influx-rex-smart_v3.dtb";
 		}
 		else if (carrier_version == 2) {
-			fdt_file = "imx8mn-ea-ucom-kit_v2.dtb";
+			fdt_file = "imx8mn-influx-rex-smart_v2.dtb";
 		}
 		else {
 			fdt_file = CONFIG_DEFAULT_FDT_FILE;
@@ -201,9 +201,9 @@ int board_late_init(void)
 		env_set("fdt_file", fdt_file);
 	}
 
-	ea_gpio_exp_configure(1);
+	inf_gpio_exp_configure(1);
 
-	ea_board_info_to_env();
+	inf_board_info_to_env();
 
 	return 0;
 }

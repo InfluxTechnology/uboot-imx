@@ -80,49 +80,49 @@ static iomux_v3_cfg_t const usdhc3_pads[] = {
 
 #include "ddr4_timing.c"
 
-enum ea_ddr_field {
-	EA_DDR_DDRC   = 1,
-	EA_DDR_DDRPHY,
-	EA_DDR_DDRPHY_TRAINED,
-	EA_DDR_PHY_PIE,
-	EA_DDR_FSP_INFO,
-	EA_DDR_FSP0,
-	EA_DDR_FSP1,
-	EA_DDR_FSP2,
-	EA_DDR_FSP3,
+enum inf_ddr_field {
+	INF_DDR_DDRC   = 1,
+	INF_DDR_DDRPHY,
+	INF_DDR_DDRPHY_TRAINED,
+	INF_DDR_PHY_PIE,
+	INF_DDR_FSP_INFO,
+	INF_DDR_FSP0,
+	INF_DDR_FSP1,
+	INF_DDR_FSP2,
+	INF_DDR_FSP3,
 };
 
 struct dram_fsp_msg ea_ddr_dram_fsp_msg[4] = {{1}};
 
-#define EA_DBUF_SZ (16384)
-#define EA_GZBUF_SZ (6144)
-static unsigned char ea_dbuf[EA_DBUF_SZ] = {1};
-static unsigned char ea_gzbuf[EA_GZBUF_SZ] = {1};
+#define INF_DBUF_SZ (16384)
+#define INF_GZBUF_SZ (6144)
+static unsigned char inf_dbuf[EA_DBUF_SZ] = {1};
+static unsigned char inf_gzbuf[EA_GZBUF_SZ] = {1};
 
-static void spl_ddr_map_array(enum ea_ddr_field idx, struct dram_cfg_param* a, int sz)
+static void spl_ddr_map_array(enum inf_ddr_field idx, struct dram_cfg_param* a, int sz)
 {
 	switch(idx) {
-	case EA_DDR_DDRC:
+	case INF_DDR_DDRC:
 		dram_timing.ddrc_cfg = a;
 		dram_timing.ddrc_cfg_num = sz;
 
 		break;
-	case EA_DDR_DDRPHY:
+	case INF_DDR_DDRPHY:
 		dram_timing.ddrphy_cfg = a;
 		dram_timing.ddrphy_cfg_num = sz;
 
 		break;
-	case EA_DDR_DDRPHY_TRAINED:
+	case INF_DDR_DDRPHY_TRAINED:
 		dram_timing.ddrphy_trained_csr = a;
 		dram_timing.ddrphy_trained_csr_num = sz;
 
 		break;
-	case EA_DDR_PHY_PIE:
+	case INF_DDR_PHY_PIE:
 		dram_timing.ddrphy_pie = a;
 		dram_timing.ddrphy_pie_num = sz;
 
 		break;
-	case EA_DDR_FSP_INFO:
+	case INF_DDR_FSP_INFO:
 		/*
 		 * [0].reg = size of the fsp table
 		 * [1].reg = fsp_table[0]
@@ -131,43 +131,43 @@ static void spl_ddr_map_array(enum ea_ddr_field idx, struct dram_cfg_param* a, i
 		 * [2].val = fsp_table[3]
 		 */
 		dram_timing.fsp_msg_num = a[0].reg;
-		dram_timing.fsp_msg = ea_ddr_dram_fsp_msg;
+		dram_timing.fsp_msg = inf_ddr_dram_fsp_msg;
 		dram_timing.fsp_table[0] = a[1].reg;
 		dram_timing.fsp_table[1] = a[1].val;
 		dram_timing.fsp_table[2] = a[2].reg;
 		dram_timing.fsp_table[3] = a[2].val;
 		break;
-	case EA_DDR_FSP0:
+	case INF_DDR_FSP0:
 		/*
 		 * First pair conatins drate and fw_type
 		 */
-		ea_ddr_dram_fsp_msg[0].drate   = a[0].reg;
-		ea_ddr_dram_fsp_msg[0].fw_type = a[0].val;
-		ea_ddr_dram_fsp_msg[0].fsp_cfg = &a[1];
+		inf_ddr_dram_fsp_msg[0].drate   = a[0].reg;
+		inf_ddr_dram_fsp_msg[0].fw_type = a[0].val;
+		inf_ddr_dram_fsp_msg[0].fsp_cfg = &a[1];
 
 		/* sz also contains the drate and fw_type pair -> remove one */
-		ea_ddr_dram_fsp_msg[0].fsp_cfg_num = sz-1;
+		inf_ddr_dram_fsp_msg[0].fsp_cfg_num = sz-1;
 
 		break;
-	case EA_DDR_FSP1:
-		ea_ddr_dram_fsp_msg[1].drate   = a[0].reg;
-		ea_ddr_dram_fsp_msg[1].fw_type = a[0].val;
-		ea_ddr_dram_fsp_msg[1].fsp_cfg = &a[1];
-		ea_ddr_dram_fsp_msg[1].fsp_cfg_num = sz-1;
+	case INF_DDR_FSP1:
+		inf_ddr_dram_fsp_msg[1].drate   = a[0].reg;
+		inf_ddr_dram_fsp_msg[1].fw_type = a[0].val;
+		inf_ddr_dram_fsp_msg[1].fsp_cfg = &a[1];
+		inf_ddr_dram_fsp_msg[1].fsp_cfg_num = sz-1;
 
 		break;
-	case EA_DDR_FSP2:
-		ea_ddr_dram_fsp_msg[2].drate   = a[0].reg;
-		ea_ddr_dram_fsp_msg[2].fw_type = a[0].val;
-		ea_ddr_dram_fsp_msg[2].fsp_cfg = &a[1];
-		ea_ddr_dram_fsp_msg[2].fsp_cfg_num = sz-1;
+	case INF_DDR_FSP2:
+		inf_ddr_dram_fsp_msg[2].drate   = a[0].reg;
+		inf_ddr_dram_fsp_msg[2].fw_type = a[0].val;
+		inf_ddr_dram_fsp_msg[2].fsp_cfg = &a[1];
+		inf_ddr_dram_fsp_msg[2].fsp_cfg_num = sz-1;
 
 		break;
-	case EA_DDR_FSP3:
-		ea_ddr_dram_fsp_msg[3].drate   = a[0].reg;
-		ea_ddr_dram_fsp_msg[3].fw_type = a[0].val;
-		ea_ddr_dram_fsp_msg[3].fsp_cfg = &a[1];
-		ea_ddr_dram_fsp_msg[3].fsp_cfg_num = sz-1;
+	case INF_DDR_FSP3:
+		inf_ddr_dram_fsp_msg[3].drate   = a[0].reg;
+		inf_ddr_dram_fsp_msg[3].fw_type = a[0].val;
+		inf_ddr_dram_fsp_msg[3].fsp_cfg = &a[1];
+		inf_ddr_dram_fsp_msg[3].fsp_cfg_num = sz-1;
 
 		break;
 	default:
@@ -176,7 +176,7 @@ static void spl_ddr_map_array(enum ea_ddr_field idx, struct dram_cfg_param* a, i
 	}
 }
 
-static int spl_ddr_unpack_data(ea_eeprom_config_t* cfg)
+static int spl_ddr_unpack_data(inf_eeprom_config_t* cfg)
 {
 	int ret;
 	int offset;
@@ -187,19 +187,19 @@ static int spl_ddr_unpack_data(ea_eeprom_config_t* cfg)
 	/* data_size is in this case the size of the gzipped data */
 	len = cfg->data_size;
 
-	ret = ea_eeprom_read_all_data(ea_gzbuf, EA_GZBUF_SZ, &nread);
+	ret = inf_eeprom_read_all_data(inf_gzbuf, INF_GZBUF_SZ, &nread);
 	if (ret) {
 		printf("Failed to read ddr data from eeprom %d\n", ret);
 		return ret;
 	}
 
-	ret = gunzip(ea_dbuf, EA_DBUF_SZ, ea_gzbuf, &len);
+	ret = gunzip(inf_dbuf, INF_DBUF_SZ, inf_gzbuf, &len);
 	if (ret) {
 		printf("Failed to unpack ddr data %d\n", ret);
 		return ret;
 	}
 
-	p = (struct dram_cfg_param*)&ea_dbuf[0];
+	p = (struct dram_cfg_param*)&inf_dbuf[0];
 
 	offset = 0;
 	while(offset*sizeof(struct dram_cfg_param) < len) {
@@ -212,18 +212,18 @@ static int spl_ddr_unpack_data(ea_eeprom_config_t* cfg)
 
 static void spl_dram_init(uint32_t *size)
 {
-	ea_eeprom_config_t cfg;
+	inf_eeprom_config_t cfg;
 	int ret;
 
         /* set default value, will be replaced if  eeprom cfg is valid */
         *size = (PHYS_SDRAM_SIZE >> 20);
 
-#ifdef CONFIG_EA_IMX_PTP
+#ifdef CONFIG_INF_IMX_PTP
 	/* Skip reading eeprom */
 	(void)cfg;
 	(void)ret;
 #else
-        ret = ea_eeprom_get_config(&cfg);
+        ret = inf_eeprom_get_config(&cfg);
 
         /* If eeprom is valid read ddr config; otherwise use default */
         if (!ret) {
@@ -232,8 +232,8 @@ static void spl_dram_init(uint32_t *size)
                 /*
                  * timing values might exist in eeprom as gzipped data
                  */
-                if (cfg.data_type == EA_EEPROM_DATA_TYPE_GZIP) {
-                        printf("EA: Using gzipped ddr data from eeprom\n");
+                if (cfg.data_type == INF_EEPROM_DATA_TYPE_GZIP) {
+                        printf("INF: Using gzipped ddr data from eeprom\n");
                         ret = spl_ddr_unpack_data(&cfg);
                 }
         }
@@ -359,7 +359,7 @@ void board_init_f(ulong dummy)
 {
 	int ret;
 	uint32_t size;
-	ea_config_t *ea_conf = (ea_config_t *)EA_SHARED_CONFIG_MEM;
+	inf_config_t *inf_conf = (inf_config_t *)INF_SHARED_CONFIG_MEM;
 
 	/* Clear the BSS. */
 	memset(__bss_start, 0, __bss_end - __bss_start);
@@ -396,9 +396,9 @@ void board_init_f(ulong dummy)
 	 * from eeprom. U-boot is not able to do this before relocation
 	 * when the device model (CONFIG_DM) is enabled.
 	 */
-	ea_conf->magic = EA_CONFIG_MAGIC;
-	ea_conf->is_carrier_v2 = ea_is_carrier_v2(0);
-	ea_conf->ddr_size = size;
+	inf_conf->magic = INF_CONFIG_MAGIC;
+	inf_conf->is_carrier_v2 = inf_is_carrier_v2(0);
+	inf_conf->ddr_size = size;
 
 	board_init_r(NULL, 0);
 }

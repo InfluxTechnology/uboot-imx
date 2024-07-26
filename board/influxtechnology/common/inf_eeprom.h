@@ -12,16 +12,16 @@
 
 
 #ifdef CONFIG_MX7ULP
-  #define EA_EEPROM_I2C_BUS   5
+  #define INF_EEPROM_I2C_BUS   5
 #else
-  #define EA_EEPROM_I2C_BUS   0
+  #define INF_EEPROM_I2C_BUS   0
 #endif
-#define EA_EEPROM_I2C_SLAVE 0x55
+#define INF_EEPROM_I2C_SLAVE 0x55
 
-#define EA_EEPROM_MAGIC 0xEA434F4D
+#define INF_EEPROM_MAGIC 0xEA434F4D
 
 /* indicates which max version that is supported */
-#define EA_EEPROM_CFG_VERSION (2)
+#define INF_EEPROM_CFG_VERSION (2)
 
 /*
  * The data type indicates what kind of data that is stored after the
@@ -29,9 +29,9 @@
  */
 
 /* num value pairs */
-#define EA_EEPROM_DATA_TYPE_PAIRS (0)
+#define INF_EEPROM_DATA_TYPE_PAIRS (0)
 /* gzipped data that can be specific to the board */
-#define EA_EEPROM_DATA_TYPE_GZIP  (1)
+#define INF_EEPROM_DATA_TYPE_GZIP  (1)
 
 
 typedef struct {
@@ -55,26 +55,26 @@ typedef struct {
 
 	uint8_t  data_type;
 	uint8_t  reserved[2];
-} __attribute__((__packed__)) ea_eeprom_config_t;
+} __attribute__((__packed__)) inf_eeprom_config_t;
 
 typedef struct {
 	u32 num_pairs;
 	u32 next;
 	u32 ddr_size_mb;
-} ea_ddr_cfg_t;
+} inf_ddr_cfg_t;
 
 typedef struct {
 	u32 reg;
 	u32 val;
-} ea_ddr_cfg_pair_t;
+} inf_ddr_cfg_pair_t;
 
-int ea_eeprom_init(void);
-int ea_eeprom_get_config(ea_eeprom_config_t* config);
-int ea_eeprom_ddr_cfg_init(ea_ddr_cfg_t *cfg);
-int ea_eeprom_ddr_cfg_read(ea_ddr_cfg_t *cfg, ea_ddr_cfg_pair_t* pairs,
+int inf_eeprom_init(void);
+int inf_eeprom_get_config(inf_eeprom_config_t* config);
+int inf_eeprom_ddr_cfg_init(inf_ddr_cfg_t *cfg);
+int inf_eeprom_ddr_cfg_read(inf_ddr_cfg_t *cfg, inf_ddr_cfg_pair_t* pairs,
         int num, int *num_read);
 
-int ea_eeprom_read_all_data(uint8_t* buf, int buf_sz, int *read);
+int inf_eeprom_read_all_data(uint8_t* buf, int buf_sz, int *read);
 
 #endif
 

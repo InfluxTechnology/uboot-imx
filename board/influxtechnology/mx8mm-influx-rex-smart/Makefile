@@ -1,5 +1,5 @@
 #
-# Copyright 2019 Embedded Artists AB
+# Copyright 2019 Influx Technology
 #
 # SPDX-License-Identifier:      GPL-2.0+
 #
