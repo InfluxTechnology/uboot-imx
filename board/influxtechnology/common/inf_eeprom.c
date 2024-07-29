@@ -56,7 +56,7 @@ int inf_eeprom_get_config(inf_eeprom_config_t* config)
 
 	i2c_set_bus_num(INF_EEPROM_I2C_BUS);
 
-	if (i2c_probe(inf_EEPROM_I2C_SLAVE)) {
+	if (i2c_probe(INF_EEPROM_I2C_SLAVE)) {
 		return -ENODEV;
 	}
 
@@ -146,7 +146,7 @@ int inf_eeprom_ddr_cfg_read(inf_ddr_cfg_t *cfg, inf_ddr_cfg_pair_t* pairs,
 #if !defined(CONFIG_DM_I2C)
 	inf_eeprom_init();
 	if (i2c_read(INF_EEPROM_I2C_SLAVE,
-		sizeof(inf_eeprom_config_t)+cfg->next*sizeof(INF_ddr_cfg_pair_t),
+		sizeof(inf_eeprom_config_t)+cfg->next*sizeof(inf_ddr_cfg_pair_t),
 		2,
 		(uint8_t *)pairs,
 		to_read*sizeof(inf_ddr_cfg_pair_t)))
