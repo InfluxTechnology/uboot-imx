@@ -92,7 +92,7 @@ int inf_eeprom_get_config(inf_eeprom_config_t* config)
 
 	if (config->version > INF_EEPROM_CFG_VERSION) {
 		printf("INF config: Unsupported config version (%d != %d)\n",
-			config->version, EA_EEPROM_CFG_VERSION);
+			config->version, INF_EEPROM_CFG_VERSION);
 		return -EINVAL;
 	}
 

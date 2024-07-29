@@ -159,7 +159,7 @@ int board_init(void)
 	arm_smccc_smc(IMX_SIP_GPC, IMX_SIP_GPC_PM_DOMAIN,
 		      MIPI, true, 0, 0, 0, 0, &res);
 
-	ea_print_board();
+	inf_print_board();
 
 	return 0;
 }

@@ -11,7 +11,7 @@
 
 /*
  * Confguration data setup by SPL and given to u-boot
- * via shared memory (EA_SHARED_CONFIG_MEM)
+ * via shared memory (INF_SHARED_CONFIG_MEM)
  *
  */
 typedef struct {
