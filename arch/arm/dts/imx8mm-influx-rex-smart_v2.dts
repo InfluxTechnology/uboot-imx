@@ -17,8 +17,8 @@
 #include "imx8mm.dtsi"
 
 / {
-		model = "Influx Technology i.MX8MM Rexgen Smart";
-        compatible = "fsl,imx8mm-influx-rex-smart", "fsl,imx8mm";
+	model = "Influx Technology i.MX8MM Rexgen Smart";
+    compatible = "fsl,imx8mm-influx-rex-smart", "fsl,imx8mm";
 
 	chosen {
 		bootargs = "console=ttymxc1,115200 earlycon=ec_imx6q,0x30890000,115200";
