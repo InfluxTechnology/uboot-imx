@@ -1,0 +1,12 @@
+if TARGET_MX8MM_INFLUX
+
+config SYS_BOARD
+	default "mx8mm-influx-rex-smart"
+
+config SYS_VENDOR
+	default "influxtechnology"
+
+config SYS_CONFIG_NAME
+	default "mx8mm-influx-rex-smart"
+
+endif
