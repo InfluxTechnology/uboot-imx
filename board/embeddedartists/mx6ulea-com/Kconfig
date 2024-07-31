@@ -1,0 +1,20 @@
+if TARGET_MX6ULEA_COM || TARGET_MX6ULLEA_COM
+
+config SYS_BOARD
+	default "mx6ulea-com"
+
+config SYS_VENDOR
+	default "embeddedartists"
+
+config SYS_SOC
+	default "mx6"
+
+config SYS_CONFIG_NAME
+	default "mx6ulea-com"
+
+config IMX_CONFIG
+	default "board/embeddedartists/mx6ulea-com/imximage.cfg"
+
+config SYS_TEXT_BASE
+        default 0x87800000
+endif
