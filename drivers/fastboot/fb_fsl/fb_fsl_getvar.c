@@ -47,17 +47,15 @@
 #define ATAP_UUID_STR_SIZE ((ATAP_UUID_SIZE*2) + 1)
 #endif
 
-#if defined(CONFIG_ANDROID_THINGS_SUPPORT) && defined(CONFIG_ARCH_IMX8M)
-#define FASTBOOT_COMMON_VAR_NUM 15
-#else
-#define FASTBOOT_COMMON_VAR_NUM 14
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+#include "fb_fsl_virtual_ab.h"
 #endif
 
 #define FASTBOOT_VAR_YES    "yes"
 #define FASTBOOT_VAR_NO     "no"
 
 /* common variables of fastboot getvar command */
-char *fastboot_common_var[FASTBOOT_COMMON_VAR_NUM] = {
+char *fastboot_common_var[] = {
 	"version",
 	"version-bootloader",
 	"version-baseband",
@@ -73,8 +71,10 @@ char *fastboot_common_var[FASTBOOT_COMMON_VAR_NUM] = {
 	"battery-soc-ok",
 	"is-userspace",
 #if defined(CONFIG_ANDROID_THINGS_SUPPORT) && defined(CONFIG_ARCH_IMX8M)
-	"baseboard_id"
+	"baseboard_id",
 #endif
+	"tee_enabled",
+	"soc_rev",
 };
 
 /* at-vboot-state variable list */
@@ -118,7 +118,7 @@ static char serial[IMX_SERIAL_LEN];
 
 char *get_serial(void)
 {
-#ifdef CONFIG_SERIAL_TAG
+#ifdef CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG
 	struct tag_serialnr serialnr;
 	memset(serial, 0, IMX_SERIAL_LEN);
 
@@ -129,14 +129,6 @@ char *get_serial(void)
 	return NULL;
 #endif
 }
-
-#if !defined(PRODUCT_NAME)
-#define PRODUCT_NAME "NXP i.MX"
-#endif
-
-#if !defined(VARIANT_NAME)
-#define VARIANT_NAME "NXP i.MX"
-#endif
 
 #ifdef CONFIG_IMX_TRUSTY_OS
 static void uuid_hex2string(uint8_t *uuid, char* buf, uint32_t uuid_len, uint32_t uuid_strlen) {
@@ -211,7 +203,7 @@ static int get_single_var(char *cmd, char *response)
 	} else if (!strcmp_l1("battery-soc-ok", cmd)) {
 		strncat(response, "yes", chars_left);
 	} else if (!strcmp_l1("variant", cmd)) {
-		strncat(response, VARIANT_NAME, chars_left);
+		strncat(response, CONFIG_TARGET_PRODUCT_VARIANT, chars_left);
 	} else if (!strcmp_l1("off-mode-charge", cmd)) {
 		strncat(response, "1", chars_left);
 	} else if (!strcmp_l1("is-userspace", cmd)) {
@@ -223,6 +215,10 @@ static int get_single_var(char *cmd, char *response)
 	} else if (!strcmp_l1("erase-block-size", cmd)) {
 		mmc_dev_no = mmc_get_env_dev();
 		mmc = find_mmc_device(mmc_dev_no);
+		if (!mmc) {
+			strncat(response, "FAILCannot get dev", chars_left);
+			return -1;
+		}
 		blksz = get_block_size();
 		snprintf(response + strlen(response), chars_left, "0x%x",
 				(blksz * mmc->erase_grp_size));
@@ -238,7 +234,7 @@ static int get_single_var(char *cmd, char *response)
 			return -1;
 		}
 	} else if (!strcmp_l1("product", cmd)) {
-		strncat(response, PRODUCT_NAME, chars_left);
+		strncat(response, CONFIG_TARGET_PRODUCT_NAME, chars_left);
 	}
 #ifdef CONFIG_IMX_TRUSTY_OS
         else if(!strcmp_l1("at-attest-uuid", cmd)) {
@@ -430,6 +426,27 @@ static int get_single_var(char *cmd, char *response)
 
 	}
 #endif
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+	else if (!strcmp_l1("snapshot-update-status", cmd)) {
+		if (virtual_ab_update_is_merging())
+			strncat(response, "merging", chars_left);
+		else if (virtual_ab_update_is_snapshoted())
+			strncat(response, "snapshotted", chars_left);
+		else
+			strncat(response, "none", chars_left);
+	}
+#endif
+	else if (!strcmp_l1("soc_rev", cmd)) {
+		s = env_get("soc_rev");
+		strncat(response, s ? s : "N/A", chars_left);
+	}
+        else if (!strcmp_l1("tee_enabled", cmd)) {
+#ifdef CONFIG_IMX_TRUSTY_OS
+		strncat(response, FASTBOOT_VAR_YES, chars_left);
+#else
+		strncat(response, FASTBOOT_VAR_NO, chars_left);
+#endif
+	}
 	else {
 		char envstr[32];
 
@@ -452,7 +469,7 @@ void fastboot_getvar(char *cmd, char *response)
 	int status = 0;
 	int count = 0;
 	char var_name[FASTBOOT_RESPONSE_LEN];
-	char partition_base_name[MAX_PTN][16];
+	char partition_base_name[MAX_PTN][20];
 	char slot_suffix[2][5] = {"a","b"};
 
 	if (!cmd) {
@@ -467,7 +484,7 @@ void fastboot_getvar(char *cmd, char *response)
 
 
 		/* get common variables */
-		for (n = 0; n < FASTBOOT_COMMON_VAR_NUM; n++) {
+		for (n = 0; n < sizeof(fastboot_common_var)/sizeof(char *); n++) {
 			snprintf(response, FASTBOOT_RESPONSE_LEN, "INFO%s:", fastboot_common_var[n]);
 			get_single_var(fastboot_common_var[n], response);
 			fastboot_tx_write_more(response);
@@ -535,6 +552,12 @@ void fastboot_getvar(char *cmd, char *response)
 				fastboot_tx_write_more(response);
 			}
 		}
+
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+		strncpy(response, "INFOsnapshot-update-status:", FASTBOOT_RESPONSE_LEN);
+		get_single_var("snapshot-update-status", response);
+		fastboot_tx_write_more(response);
+#endif
 
 		strncpy(response, "OKAYDone!", 10);
 		fastboot_tx_write_more(response);

@@ -17,17 +17,17 @@
 #include <asm/io.h>
 #include <asm/gpio.h>
 #include <asm/arch/clock.h>
-#include <asm/arch/sci/sci.h>
+#include <firmware/imx/sci/sci.h>
 #include <asm/arch/imx8-pins.h>
 #include <asm/arch/snvs_security_sc.h>
 #include <dm.h>
-#include <imx8_hsio.h>
 #include <usb.h>
 #include <asm/arch/iomux.h>
 #include <asm/arch/sys_proto.h>
 #include <power-domain.h>
 #include <asm/arch/lpcg.h>
 #include <bootm.h>
+#include <linux/delay.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -71,117 +71,6 @@ int board_early_init_f(void)
 #if IS_ENABLED(CONFIG_FEC_MXC)
 #include <miiphy.h>
 
-#ifndef CONFIG_DM_ETH
-static iomux_cfg_t pad_enet1[] = {
-	SC_P_ENET1_RGMII_RX_CTL | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET1_RGMII_RXD0 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET1_RGMII_RXD1 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET1_RGMII_RXD2 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET1_RGMII_RXD3 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET1_RGMII_RXC | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET1_RGMII_TX_CTL | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET1_RGMII_TXD0 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET1_RGMII_TXD1 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET1_RGMII_TXD2 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET1_RGMII_TXD3 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET1_RGMII_TXC | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-
-	/* Shared MDIO */
-	SC_P_ENET0_MDC | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_MDIO | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-};
-
-static iomux_cfg_t pad_enet0[] = {
-	SC_P_ENET0_RGMII_RX_CTL | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXD0 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXD1 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXD2 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXD3 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXC | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_TX_CTL | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXD0 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXD1 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXD2 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXD3 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXC | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-
-	/* Shared MDIO */
-	SC_P_ENET0_MDC | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_MDIO | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-};
-
-static void setup_iomux_fec(void)
-{
-	if (0 == CONFIG_FEC_ENET_DEV)
-		imx8_iomux_setup_multiple_pads(pad_enet0, ARRAY_SIZE(pad_enet0));
-	else
-		imx8_iomux_setup_multiple_pads(pad_enet1, ARRAY_SIZE(pad_enet1));
-}
-
-static void enet_device_phy_reset(void)
-{
-	struct gpio_desc desc_enet0;
-	struct gpio_desc desc_enet1;
-	int ret;
-
-	ret = dm_gpio_lookup_name("gpio@18_1", &desc_enet0);
-	if (ret)
-		return;
-
-	ret = dm_gpio_request(&desc_enet0, "enet0_reset");
-	if (ret)
-		return;
-	ret = dm_gpio_lookup_name("gpio@18_4", &desc_enet1);
-	if (ret)
-		return;
-
-	ret = dm_gpio_request(&desc_enet1, "enet1_reset");
-	if (ret)
-		return;
-
-	dm_gpio_set_dir_flags(&desc_enet0, GPIOD_IS_OUT);
-	dm_gpio_set_value(&desc_enet0, 0);
-	udelay(50);
-	dm_gpio_set_value(&desc_enet0, 1);
-
-	dm_gpio_set_dir_flags(&desc_enet1, GPIOD_IS_OUT);
-	dm_gpio_set_value(&desc_enet1, 0);
-	udelay(50);
-	dm_gpio_set_value(&desc_enet1, 1);
-
-	/* The board has a long delay for this reset to become stable */
-	mdelay(200);
-}
-
-int board_eth_init(bd_t *bis)
-{
-	int ret;
-	struct power_domain pd;
-
-	printf("[%s] %d\n", __func__, __LINE__);
-
-	/* Reset ENET PHY */
-	enet_device_phy_reset();
-
-	if (CONFIG_FEC_ENET_DEV) {
-		if (!power_domain_lookup_name("conn_enet1", &pd))
-			power_domain_on(&pd);
-	} else {
-		if (!power_domain_lookup_name("conn_enet0", &pd))
-			power_domain_on(&pd);
-	}
-
-	setup_iomux_fec();
-
-	ret = fecmxc_initialize_multi(bis, CONFIG_FEC_ENET_DEV,
-		CONFIG_FEC_MXC_PHYADDR, IMX_FEC_BASE);
-	if (ret)
-		printf("FEC1 MXC: %s:failed\n", __func__);
-
-	return ret;
-}
-#endif
-
 #define MAX7322_I2C_ADDR		0x68
 #define MAX7322_I2C_BUS		2 /* I2C2 */
 
@@ -220,14 +109,6 @@ int board_phy_config(struct phy_device *phydev)
 		mdelay(1);
 	}
 
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x1f);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x8);
-
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x00);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x82ee);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x05);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x100);
-
 	if (phydev->drv->config)
 		phydev->drv->config(phydev);
 
@@ -263,6 +144,7 @@ static void board_gpio_init(void)
 
 	desc.dev = dev;
 	desc.offset = 12;
+	desc.flags = 0;
 
 	ret = dm_gpio_request(&desc, "ioexp_rst");
 	if (ret) {
@@ -325,78 +207,17 @@ int checkboard(void)
 	puts("Board: iMX8QM DDR4 VAL\n");
 #endif
 
-	build_info();
 	print_bootinfo();
 
 	return 0;
 }
 
-#ifdef CONFIG_FSL_HSIO
-
-#define PCIE_PAD_CTRL	((SC_PAD_CONFIG_OD_IN << PADRING_CONFIG_SHIFT))
-static iomux_cfg_t board_pcie_pins[] = {
-	SC_P_PCIE_CTRL0_CLKREQ_B | MUX_MODE_ALT(0) | MUX_PAD_CTRL(PCIE_PAD_CTRL),
-	SC_P_PCIE_CTRL0_WAKE_B | MUX_MODE_ALT(0) | MUX_PAD_CTRL(PCIE_PAD_CTRL),
-	SC_P_PCIE_CTRL0_PERST_B | MUX_MODE_ALT(0) | MUX_PAD_CTRL(PCIE_PAD_CTRL),
-};
-
-static void imx8qm_hsio_initialize(void)
-{
-	struct power_domain pd;
-	int ret;
-
-	if (!power_domain_lookup_name("hsio_sata0", &pd)) {
-		ret = power_domain_on(&pd);
-		if (ret)
-			printf("hsio_sata0 Power up failed! (error = %d)\n", ret);
-	}
-
-	if (!power_domain_lookup_name("hsio_pcie0", &pd)) {
-		ret = power_domain_on(&pd);
-		if (ret)
-			printf("hsio_pcie0 Power up failed! (error = %d)\n", ret);
-	}
-
-	if (!power_domain_lookup_name("hsio_pcie1", &pd)) {
-		ret = power_domain_on(&pd);
-		if (ret)
-			printf("hsio_pcie1 Power up failed! (error = %d)\n", ret);
-	}
-
-	if (!power_domain_lookup_name("hsio_gpio", &pd)) {
-		ret = power_domain_on(&pd);
-		if (ret)
-			 printf("hsio_gpio Power up failed! (error = %d)\n", ret);
-	}
-
-	lpcg_all_clock_on(HSIO_PCIE_X2_LPCG);
-	lpcg_all_clock_on(HSIO_PCIE_X1_LPCG);
-	lpcg_all_clock_on(HSIO_PHY_X2_LPCG);
-	lpcg_all_clock_on(HSIO_PHY_X1_LPCG);
-	lpcg_all_clock_on(HSIO_PCIE_X2_CRR2_LPCG);
-	lpcg_all_clock_on(HSIO_PCIE_X1_CRR3_LPCG);
-	lpcg_all_clock_on(HSIO_MISC_LPCG);
-	lpcg_all_clock_on(HSIO_GPIO_LPCG);
-
-	imx8_iomux_setup_multiple_pads(board_pcie_pins, ARRAY_SIZE(board_pcie_pins));
-}
-
-void pci_init_board(void)
-{
-	/* test the 1 lane mode of the PCIe A controller */
-	mx8qm_pcie_init();
-}
-#endif
-
 int board_init(void)
 {
 	board_gpio_init();
 
-#ifdef CONFIG_FSL_HSIO
-	imx8qm_hsio_initialize();
-#endif
 
-#ifdef CONFIG_SNVS_SEC_SC_AUTO
+#ifdef CONFIG_IMX_SNVS_SEC_SC_AUTO
 	{
 		int ret = snvs_security_sc_init();
 
@@ -408,25 +229,25 @@ int board_init(void)
 	return 0;
 }
 
-void board_quiesce_devices()
+void board_quiesce_devices(void)
 {
 	const char *power_on_devices[] = {
 		"dma_lpuart0",
 	};
 
-	power_off_pd_devices(power_on_devices, ARRAY_SIZE(power_on_devices));
+	imx8_power_off_pd_devices(power_on_devices, ARRAY_SIZE(power_on_devices));
 }
 
 /*
  * Board specific reset that is system reset.
  */
-void reset_cpu(ulong addr)
+void reset_cpu(void)
 {
 	/* TODO */
 }
 
 #ifdef CONFIG_OF_BOARD_SETUP
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	return 0;
 }
@@ -434,6 +255,8 @@ int ft_board_setup(void *blob, bd_t *bd)
 
 int board_late_init(void)
 {
+	build_info();
+
 #ifdef CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG
 	env_set("board_name", "VAL");
 	env_set("board_rev", "iMX8QM");

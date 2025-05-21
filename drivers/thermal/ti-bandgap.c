@@ -1,7 +1,7 @@
 /*
  * TI Bandgap temperature sensor driver
  *
- * Copyright (C) 2017 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2017 Texas Instruments Incorporated - https://www.ti.com/
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -194,5 +194,5 @@ U_BOOT_DRIVER(ti_bandgap_thermal) = {
 	.ops	= &ti_thermal_ops,
 	.probe	= ti_bandgap_probe,
 	.of_match = of_ti_bandgap_match,
-	.priv_auto_alloc_size = sizeof(struct ti_bandgap),
+	.priv_auto	= sizeof(struct ti_bandgap),
 };

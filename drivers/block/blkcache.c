@@ -4,10 +4,12 @@
  * Author: Eric Nelson<eric@nelint.com>
  *
  */
-#include <config.h>
 #include <common.h>
+#include <blk.h>
+#include <log.h>
 #include <malloc.h>
 #include <part.h>
+#include <asm/global_data.h>
 #include <linux/ctype.h>
 #include <linux/list.h>
 
@@ -21,25 +23,12 @@ struct block_cache_node {
 	char *cache;
 };
 
-#ifndef CONFIG_M68K
 static LIST_HEAD(block_cache);
-#else
-static struct list_head block_cache;
-#endif
 
 static struct block_cache_stats _stats = {
 	.max_blocks_per_entry = 8,
 	.max_entries = 32
 };
-
-#ifdef CONFIG_M68K
-int blkcache_init(void)
-{
-	INIT_LIST_HEAD(&block_cache);
-
-	return 0;
-}
-#endif
 
 static struct block_cache_node *cache_find(int iftype, int devnum,
 					   lbaint_t start, lbaint_t blkcnt,
@@ -145,8 +134,8 @@ void blkcache_invalidate(int iftype, int devnum)
 
 	list_for_each_safe(entry, n, &block_cache) {
 		node = (struct block_cache_node *)entry;
-		if ((node->iftype == iftype) &&
-		    (node->devnum == devnum)) {
+		if (iftype == -1 ||
+		    (node->iftype == iftype && node->devnum == devnum)) {
 			list_del(entry);
 			free(node->cache);
 			free(node);
@@ -157,18 +146,10 @@ void blkcache_invalidate(int iftype, int devnum)
 
 void blkcache_configure(unsigned blocks, unsigned entries)
 {
-	struct block_cache_node *node;
+	/* invalidate cache if there is a change */
 	if ((blocks != _stats.max_blocks_per_entry) ||
-	    (entries != _stats.max_entries)) {
-		/* invalidate cache */
-		while (!list_empty(&block_cache)) {
-			node = (struct block_cache_node *)block_cache.next;
-			list_del(&node->lh);
-			free(node->cache);
-			free(node);
-		}
-		_stats.entries = 0;
-	}
+	    (entries != _stats.max_entries))
+		blkcache_invalidate(-1, 0);
 
 	_stats.max_blocks_per_entry = blocks;
 	_stats.max_entries = entries;
@@ -182,4 +163,9 @@ void blkcache_stats(struct block_cache_stats *stats)
 	memcpy(stats, &_stats, sizeof(*stats));
 	_stats.hits = 0;
 	_stats.misses = 0;
+}
+
+void blkcache_free(void)
+{
+	blkcache_invalidate(-1, 0);
 }

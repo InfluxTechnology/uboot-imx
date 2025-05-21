@@ -12,7 +12,10 @@ config SYS_SOC
 config SYS_CONFIG_NAME
 	default "mx6sxea-com"
 
-config SYS_TEXT_BASE
+config IMX_CONFIG
+	default "board/embeddedartists/mx6sxea-com/imximage.cfg"
+
+config TEXT_BASE
         default 0x87800000
 endif
 

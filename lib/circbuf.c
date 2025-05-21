@@ -4,7 +4,7 @@
  * Gerry Hamel, geh@ti.com, Texas Instruments
  */
 
-#include <common.h>
+#include <log.h>
 #include <malloc.h>
 
 #include <circbuf.h>

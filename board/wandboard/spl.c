@@ -5,10 +5,13 @@
  *         Richard Hu <hakahu@gmail.com>
  */
 
+#include <common.h>
+#include <init.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/imx-regs.h>
 #include <asm/arch/iomux.h>
 #include <asm/arch/mx6-pins.h>
+#include <linux/delay.h>
 #include <linux/errno.h>
 #include <asm/gpio.h>
 #include <asm/mach-imx/iomux-v3.h>
@@ -473,7 +476,7 @@ int board_mmc_getcd(struct mmc *mmc)
 	return ret;
 }
 
-int board_mmc_init(bd_t *bis)
+int board_mmc_init(struct bd_info *bis)
 {
 	int ret;
 	u32 index = 0;
@@ -484,7 +487,7 @@ int board_mmc_init(bd_t *bis)
 	 * mmc0                    SOM MicroSD
 	 * mmc1                    Carrier board MicroSD
 	 */
-	for (index = 0; index < CONFIG_SYS_FSL_USDHC_NUM; ++index) {
+	for (index = 0; index < CFG_SYS_FSL_USDHC_NUM; ++index) {
 		switch (index) {
 		case 0:
 			SETUP_IOMUX_PADS(usdhc3_pads);
@@ -501,7 +504,7 @@ int board_mmc_init(bd_t *bis)
 		default:
 			printf("Warning: you configured more USDHC controllers"
 			       "(%d) then supported by the board (%d)\n",
-			       index + 1, CONFIG_SYS_FSL_USDHC_NUM);
+			       index + 1, CFG_SYS_FSL_USDHC_NUM);
 			return -EINVAL;
 		}
 

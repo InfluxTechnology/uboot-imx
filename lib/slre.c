@@ -20,8 +20,9 @@
 #include <stdlib.h>
 #include <string.h>
 #else
-#include <common.h>
+#include <log.h>
 #include <linux/ctype.h>
+#include <linux/string.h>
 #endif /* SLRE_TEST */
 
 #include <errno.h>
@@ -685,6 +686,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (!slre_compile(&slre, argv[1])) {
+		(void) fclose(fp);
 		fprintf(stderr, "Error compiling slre: %s\n", slre.err_str);
 		return 1;
 	}

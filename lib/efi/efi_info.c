@@ -5,10 +5,10 @@
  * Access to the EFI information table
  */
 
-#include <common.h>
 #include <efi.h>
 #include <errno.h>
 #include <mapmem.h>
+#include <asm/global_data.h>
 
 int efi_info_get(enum efi_entry_t type, void **datap, int *sizep)
 {

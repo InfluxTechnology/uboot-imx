@@ -8,6 +8,77 @@
 
 #define MAX_CS_NUM	4
 
+#if defined(CONFIG_DDR4)
+enum mv_ddr_speed_bin {
+	SPEED_BIN_DDR_1600J,
+	SPEED_BIN_DDR_1600K,
+	SPEED_BIN_DDR_1600L,
+	SPEED_BIN_DDR_1866L,
+	SPEED_BIN_DDR_1866M,
+	SPEED_BIN_DDR_1866N,
+	SPEED_BIN_DDR_2133N,
+	SPEED_BIN_DDR_2133P,
+	SPEED_BIN_DDR_2133R,
+	SPEED_BIN_DDR_2400P,
+	SPEED_BIN_DDR_2400R,
+	SPEED_BIN_DDR_2400T,
+	SPEED_BIN_DDR_2400U,
+	SPEED_BIN_DDR_2666T,
+	SPEED_BIN_DDR_2666U,
+	SPEED_BIN_DDR_2666V,
+	SPEED_BIN_DDR_2666W,
+	SPEED_BIN_DDR_2933V,
+	SPEED_BIN_DDR_2933W,
+	SPEED_BIN_DDR_2933Y,
+	SPEED_BIN_DDR_2933AA,
+	SPEED_BIN_DDR_3200W,
+	SPEED_BIN_DDR_3200AA,
+	SPEED_BIN_DDR_3200AC
+};
+
+enum mv_ddr_freq {
+	MV_DDR_FREQ_LOW_FREQ,
+	MV_DDR_FREQ_650,
+	MV_DDR_FREQ_667,
+	MV_DDR_FREQ_800,
+	MV_DDR_FREQ_933,
+	MV_DDR_FREQ_1066,
+	MV_DDR_FREQ_900,
+	MV_DDR_FREQ_1000,
+	MV_DDR_FREQ_1050,
+	MV_DDR_FREQ_1200,
+	MV_DDR_FREQ_1333,
+	MV_DDR_FREQ_1466,
+	MV_DDR_FREQ_1600,
+	MV_DDR_FREQ_LAST,
+	MV_DDR_FREQ_SAR
+};
+
+enum mv_ddr_speed_bin_timing {
+	SPEED_BIN_TRCD,
+	SPEED_BIN_TRP,
+	SPEED_BIN_TRAS,
+	SPEED_BIN_TRC,
+	SPEED_BIN_TRRD0_5K,
+	SPEED_BIN_TRRD1K,
+	SPEED_BIN_TRRD2K,
+	SPEED_BIN_TRRDL0_5K,
+	SPEED_BIN_TRRDL1K,
+	SPEED_BIN_TRRDL2K,
+	SPEED_BIN_TPD,
+	SPEED_BIN_TFAW0_5K,
+	SPEED_BIN_TFAW1K,
+	SPEED_BIN_TFAW2K,
+	SPEED_BIN_TWTR,
+	SPEED_BIN_TWTRL,
+	SPEED_BIN_TRTP,
+	SPEED_BIN_TWR,
+	SPEED_BIN_TMOD,
+	SPEED_BIN_TXPDLL,
+	SPEED_BIN_TXSDLL,
+	SPEED_BIN_TCCDL
+};
+#else /* CONFIG_DDR3 */
 enum mv_ddr_speed_bin {
 	SPEED_BIN_DDR_800D,
 	SPEED_BIN_DDR_800E,
@@ -74,6 +145,7 @@ enum mv_ddr_speed_bin_timing {
 	SPEED_BIN_TXPDLL,
 	SPEED_BIN_TXSDLL
 };
+#endif /* CONFIG_DDR4 */
 
 /* ddr bus masks */
 #define BUS_MASK_32BIT			0xf
@@ -179,7 +251,9 @@ enum mv_ddr_dic_evalue {
 
 /* phy electrical configuration values */
 enum mv_ddr_ohm_evalue {
+	MV_DDR_OHM_20 = 20,/*relevant for Synopsys C/A Drive strength only*/
 	MV_DDR_OHM_30 = 30,
+	MV_DDR_OHM_40 = 40,/*relevant for Synopsys C/A Drive strength only*/
 	MV_DDR_OHM_48 = 48,
 	MV_DDR_OHM_60 = 60,
 	MV_DDR_OHM_80 = 80,
@@ -319,6 +393,7 @@ unsigned short mv_ddr_bus_bit_mask_get(void);
 unsigned int mv_ddr_if_bus_width_get(void);
 unsigned int mv_ddr_cs_num_get(void);
 int mv_ddr_is_ecc_ena(void);
+int mv_ddr_ck_delay_get(void);
 unsigned long long mv_ddr_mem_sz_per_cs_get(void);
 unsigned long long mv_ddr_mem_sz_get(void);
 unsigned int mv_ddr_rtt_nom_get(void);

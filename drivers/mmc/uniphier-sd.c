@@ -64,7 +64,6 @@ static int uniphier_sd_probe(struct udevice *dev)
 	ret = clk_set_rate(&priv->clk, ULONG_MAX);
 	if (ret < 0) {
 		dev_err(dev, "failed to set rate for host clock\n");
-		clk_free(&priv->clk);
 		return ret;
 	}
 
@@ -84,7 +83,7 @@ U_BOOT_DRIVER(uniphier_mmc) = {
 	.of_match = uniphier_sd_match,
 	.bind = tmio_sd_bind,
 	.probe = uniphier_sd_probe,
-	.priv_auto_alloc_size = sizeof(struct tmio_sd_priv),
-	.platdata_auto_alloc_size = sizeof(struct tmio_sd_plat),
+	.priv_auto	= sizeof(struct tmio_sd_priv),
+	.plat_auto	= sizeof(struct tmio_sd_plat),
 	.ops = &uniphier_sd_ops,
 };

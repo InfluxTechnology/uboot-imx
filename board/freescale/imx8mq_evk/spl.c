@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Copyright 2018 NXP
+ * Copyright 2018 - 2023 NXP
  *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
 #include <cpu_func.h>
 #include <hang.h>
+#include <image.h>
+#include <init.h>
+#include <log.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <errno.h>
 #include <asm/io.h>
@@ -18,24 +21,42 @@
 #include <asm/mach-imx/iomux-v3.h>
 #include <asm/mach-imx/gpio.h>
 #include <asm/mach-imx/mxc_i2c.h>
+#include <asm/sections.h>
 #include <fsl_esdhc_imx.h>
+#include <fsl_sec.h>
 #include <mmc.h>
+#include <linux/delay.h>
 #include <power/pmic.h>
 #include <power/pfuze100_pmic.h>
 #include <spl.h>
 #include "../common/pfuze.h"
+#include <asm/arch/imx8mq_sec_def.h>
+#include <asm/arch/imx8m_csu.h>
+#include <asm/arch/imx8m_rdc.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
 extern struct dram_timing_info dram_timing_b0;
+extern struct dram_timing_info dram_timing_4g;
 
 static void spl_dram_init(void)
 {
+	/* Check PCA6416A IO EXP on 4GB WEVK only */
+#if IS_ENABLED(CONFIG_IMX8MQ_4GB_DDR_TIMING)
+	I2C_SET_BUS(2);
+	if (!i2c_probe(0x20)) {
+		ddr_init(&dram_timing_4g);
+		return;
+	} else {
+		panic("Fail to detect WEVK board but 4GB DDR is enabled\n");
+	}
+#else
 	/* ddr init */
-	if ((get_cpu_rev() & 0xfff) == CHIP_REV_2_1)
+	if (soc_rev() >= CHIP_REV_2_1)
 		ddr_init(&dram_timing);
 	else
 		ddr_init(&dram_timing_b0);
+#endif
 }
 
 #define I2C_PAD_CTRL	(PAD_CTL_DSE6 | PAD_CTL_HYS | PAD_CTL_PUE)
@@ -50,6 +71,19 @@ static struct i2c_pads_info i2c_pad_info1 = {
 		.i2c_mode = IMX8MQ_PAD_I2C1_SDA__I2C1_SDA | PC,
 		.gpio_mode = IMX8MQ_PAD_I2C1_SDA__GPIO5_IO15 | PC,
 		.gp = IMX_GPIO_NR(5, 15),
+	},
+};
+
+static struct i2c_pads_info i2c_pad_info3 = {
+	.scl = {
+		.i2c_mode = IMX8MQ_PAD_I2C3_SCL__I2C3_SCL | PC,
+		.gpio_mode = IMX8MQ_PAD_I2C3_SCL__GPIO5_IO18| PC,
+		.gp = IMX_GPIO_NR(5, 18),
+	},
+	.sda = {
+		.i2c_mode = IMX8MQ_PAD_I2C3_SDA__I2C3_SDA | PC,
+		.gpio_mode = IMX8MQ_PAD_I2C3_SDA__GPIO5_IO19 | PC,
+		.gp = IMX_GPIO_NR(5, 19),
 	},
 };
 
@@ -108,7 +142,7 @@ static struct fsl_esdhc_cfg usdhc_cfg[2] = {
 	{USDHC2_BASE_ADDR, 0, 4},
 };
 
-int board_mmc_init(bd_t *bis)
+int board_mmc_init(struct bd_info *bis)
 {
 	int i, ret;
 	/*
@@ -117,7 +151,7 @@ int board_mmc_init(bd_t *bis)
 	 * mmc0                    USDHC1
 	 * mmc1                    USDHC2
 	 */
-	for (i = 0; i < CONFIG_SYS_FSL_USDHC_NUM; i++) {
+	for (i = 0; i < CFG_SYS_FSL_USDHC_NUM; i++) {
 		switch (i) {
 		case 0:
 			init_clk_usdhc(0);
@@ -152,7 +186,7 @@ int board_mmc_init(bd_t *bis)
 	return 0;
 }
 
-#ifdef CONFIG_POWER
+#if CONFIG_IS_ENABLED(POWER_LEGACY)
 #define I2C_PMIC	0
 int power_init_board(void)
 {
@@ -195,13 +229,10 @@ int power_init_board(void)
 
 void spl_board_init(void)
 {
-#ifndef CONFIG_SPL_USB_SDP_SUPPORT
-	/* Serial download mode */
-	if (is_usb_boot()) {
-		puts("Back to ROM, SDP\n");
-		restore_boot_params();
+	if (IS_ENABLED(CONFIG_FSL_CAAM)) {
+		if (sec_init())
+			printf("\nsec_init failed!\n");
 	}
-#endif
 
 	init_usb_clk();
 
@@ -218,12 +249,30 @@ int board_fit_config_name_match(const char *name)
 }
 #endif
 
+#define GPR_PCIE_VREG_BYPASS	BIT(12)
+static void enable_pcie_vreg(bool enable)
+{
+	struct iomuxc_gpr_base_regs *gpr =
+		(struct iomuxc_gpr_base_regs *)IOMUXC_GPR_BASE_ADDR;
+
+	if (!enable) {
+		setbits_le32(&gpr->gpr[14], GPR_PCIE_VREG_BYPASS);
+		setbits_le32(&gpr->gpr[16], GPR_PCIE_VREG_BYPASS);
+	} else {
+		clrbits_le32(&gpr->gpr[14], GPR_PCIE_VREG_BYPASS);
+		clrbits_le32(&gpr->gpr[16], GPR_PCIE_VREG_BYPASS);
+	}
+}
+
 void board_init_f(ulong dummy)
 {
 	int ret;
 
 	/* Clear the BSS. */
 	memset(__bss_start, 0, __bss_end - __bss_start);
+
+	/* PCIE_VPH connects to 3.3v on EVK, enable VREG to generate 1.8V to PHY */
+	enable_pcie_vreg(true);
 
 	arch_cpu_init();
 
@@ -243,8 +292,8 @@ void board_init_f(ulong dummy)
 
 	enable_tzc380();
 
-	/* Adjust pmic voltage to 1.0V for 800M */
 	setup_i2c(0, CONFIG_SYS_I2C_SPEED, 0x7f, &i2c_pad_info1);
+	setup_i2c(2, CONFIG_SYS_I2C_SPEED, 0x7f, &i2c_pad_info3);
 
 	power_init_board();
 
@@ -254,11 +303,52 @@ void board_init_f(ulong dummy)
 	board_init_r(NULL, 0);
 }
 
-int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+#ifdef CONFIG_ANDROID_SUPPORT
+void spl_board_prepare_for_boot(void)
 {
-	puts ("resetting ...\n");
+	uint32_t val;
+	struct imx_csu_cfg csu_cfg[] = {
+		/* peripherals csl setting */
+		CSU_CSLx(CSU_CSL_OCRAM, CSU_SEC_LEVEL_2, LOCKED),
+		CSU_CSLx(CSU_CSL_OCRAM_S, CSU_SEC_LEVEL_2, LOCKED),
+		CSU_CSLx(CSU_CSL_RDC, CSU_SEC_LEVEL_3, LOCKED),
+		CSU_CSLx(CSU_CSL_TZASC, CSU_SEC_LEVEL_4, LOCKED),
 
-	reset_cpu(WDOG1_BASE_ADDR);
+		/* SA setting */
+		CSU_SA(CSU_SA_M4, 1, LOCKED),
+		CSU_SA(CSU_SA_SDMA1, 1, LOCKED),
+		CSU_SA(CSU_SA_LCDIF, 1, LOCKED),
+		CSU_SA(CSU_SA_USB, 1, LOCKED),
+		CSU_SA(CSU_SA_PCIE_CTRL, 1, LOCKED),
+		CSU_SA(CSU_SA_VPU_DECODER, 1, LOCKED),
+		CSU_SA(CSU_SA_GPU, 1, LOCKED),
+		CSU_SA(CSU_SA_ENET1, 1, LOCKED),
+		CSU_SA(CSU_SA_USDHC1, 1, LOCKED),
+		CSU_SA(CSU_SA_USDHC2, 1, LOCKED),
+		CSU_SA(CSU_SA_DISPLAY_CONTROLLER, 1, LOCKED),
+		CSU_SA(CSU_SA_HUGO, 1, LOCKED),
+		CSU_SA(CSU_SA_DAP, 1, LOCKED),
+		CSU_SA(CSU_SA_SDMA2, 1, LOCKED),
+#ifdef CONFIG_IMX_TRUSTY_OS
+		CSU_CSLx(CSU_CSL_VPU_SEC, CSU_SEC_LEVEL_5, LOCKED),
+#endif
+		{0}
+	};
 
-	return 0;
+	struct imx_rdc_cfg rdc_cfg[] = {
+		RDC_MDAn(RDC_MDA_DCSS, DID2),
+		{0},
+	};
+
+	/* csu config */
+	imx_csu_init(csu_cfg);
+
+	/* rdc config */
+	imx_rdc_init(rdc_cfg);
+
+	/* config the ocram memory range for secure access */
+	setbits_le32(IOMUXC_GPR_BASE_ADDR + 0x2c, 0x421);
+	val = readl(IOMUXC_GPR_BASE_ADDR + 0x2c);
+	setbits_le32(IOMUXC_GPR_BASE_ADDR + 0x2c, val | 0x3C3F0000);
 }
+#endif

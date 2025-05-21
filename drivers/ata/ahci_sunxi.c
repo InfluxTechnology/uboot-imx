@@ -1,10 +1,13 @@
 #include <common.h>
 #include <ahci.h>
 #include <dm.h>
+#include <log.h>
 #include <scsi.h>
 #include <errno.h>
 #include <asm/io.h>
 #include <asm/gpio.h>
+#include <linux/delay.h>
+#include <power/regulator.h>
 
 #define AHCI_PHYCS0R 0x00c0
 #define AHCI_PHYCS1R 0x00c4
@@ -72,24 +75,32 @@ static int sunxi_ahci_phy_init(u8 *reg_base)
 
 static int sunxi_sata_probe(struct udevice *dev)
 {
+	struct udevice *reg_dev;
 	ulong base;
 	u8 *reg;
 	int ret;
 
 	base = dev_read_addr(dev);
 	if (base == FDT_ADDR_T_NONE) {
-		debug("%s: Failed to find address (err=%d\n)", __func__, ret);
+		debug("%s: Failed to find address\n", __func__);
 		return -EINVAL;
 	}
 	reg = (u8 *)base;
 	ret = sunxi_ahci_phy_init(reg);
 	if (ret) {
-		debug("%s: Failed to init phy (err=%d\n)", __func__, ret);
+		debug("%s: Failed to init phy (err=%d)\n", __func__, ret);
 		return ret;
 	}
+
+	ret = device_get_supply_regulator(dev, "target-supply", &reg_dev);
+	if (ret == 0) {
+		regulator_set_enable(reg_dev, true);
+		mdelay(500);
+	}
+
 	ret = ahci_probe_scsi(dev, base);
 	if (ret) {
-		debug("%s: Failed to probe (err=%d\n)", __func__, ret);
+		debug("%s: Failed to probe (err=%d)\n", __func__, ret);
 		return ret;
 	}
 
@@ -103,7 +114,7 @@ static int sunxi_sata_bind(struct udevice *dev)
 
 	ret = ahci_bind_scsi(dev, &scsi_dev);
 	if (ret) {
-		debug("%s: Failed to bind (err=%d\n)", __func__, ret);
+		debug("%s: Failed to bind (err=%d)\n", __func__, ret);
 		return ret;
 	}
 

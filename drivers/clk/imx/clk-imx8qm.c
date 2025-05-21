@@ -7,7 +7,8 @@
 #include <common.h>
 #include <clk-uclass.h>
 #include <dm.h>
-#include <asm/arch/sci/sci.h>
+#include <log.h>
+#include <firmware/imx/sci/sci.h>
 #include <asm/arch/clock.h>
 #include <dt-bindings/clock/imx8qm-clock.h>
 #include <dt-bindings/soc/imx_rsrc.h>

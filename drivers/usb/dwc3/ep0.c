@@ -2,7 +2,7 @@
 /**
  * ep0.c - DesignWare USB3 DRD Controller Endpoint 0 Handling
  *
- * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com
+ * Copyright (C) 2015 Texas Instruments Incorporated - https://www.ti.com
  *
  * Authors: Felipe Balbi <balbi@ti.com>,
  *	    Sebastian Andrzej Siewior <bigeasy@linutronix.de>
@@ -14,7 +14,9 @@
  */
 #include <common.h>
 #include <cpu_func.h>
+#include <dm.h>
 #include <dm/device_compat.h>
+#include <linux/bug.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 

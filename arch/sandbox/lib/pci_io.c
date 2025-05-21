@@ -8,9 +8,9 @@
  * IO space access commands.
  */
 
-#include <common.h>
 #include <command.h>
 #include <dm.h>
+#include <log.h>
 #include <asm/io.h>
 
 int pci_map_physmem(phys_addr_t paddr, unsigned long *lenp,

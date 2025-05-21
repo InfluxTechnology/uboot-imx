@@ -39,17 +39,23 @@ file are covered by a digital signature.
           Signed |   +-----------------------------+   |
            Data  |   |        u-boot-spl.bin       |   |
                  |   |              +              |   |  SPL
-                 v   |           DDR FW            |   | Image
+                 |   |           DDR FW            |   | Image
+                 |   |              +              |   |
+                 v   |      Hash of FIT FDT        |   |
              ------- +-----------------------------+   |
                      |      CSF - SPL + DDR FW     |   v
                      +-----------------------------+ --------
                      |           Padding           |
-             ------- +-----------------------------+ --------
-          Signed ^   |          FDT - FIT          |   ^
-           Data  |   +-----------------------------+   |
-                 v   |          IVT - FIT          |   |
-             ------- +-----------------------------+   |
-                     |          CSF - FIT          |   |
+   ----------------- +-----------------------------+ --------
+        ^ Signed ^   |          FDT - FIT          |   ^
+        |  Data  |   +-----------------------------+   |
+        |        v   |          IVT - FIT          |   |
+ Signed |     -------+-----------------------------+   |
+  Data  |            |          CSF - FIT          |   |
+(optional)           +-----------------------------+   |
+        v            |  IVT - FIT FDT (optional)   |   |
+   ----------------- +-----------------------------+   |
+                     |  CSF - FIT FDT (optional)   |   |
              ------- +-----------------------------+   |  FIT
                  ^   |       u-boot-nodtb.bin      |   | Image
                  |   +-----------------------------+   |
@@ -124,6 +130,17 @@ to extend the root of trust, authenticating the U-Boot, ARM trusted firmware
 The root of trust can be extended again at U-Boot level to authenticate Kernel
 and M4 images.
 
+Note:
+FIT uses a FDT structure to describe the images loading information. In SPL image,
+the Hash of the FIT FDT structure is appended after DDR firmware. By default,
+SPL will verify the Hash before parsing the FIT FDT structure to load images.
+It means SPL image having to bind with FIT image. Users who need to decouple SPL
+image with FIT image, for example upgrading FIT image individually, could use
+optional FIT FDT signature. The FIT FDT signature approach generates another
+signature to FIT image, see the IVT - FIT FDT (optional) and CSF - FIT FDT (optional)
+in the signed flash.bin image layout. SPL will authenticate the FIT FDT structure
+before parsing it to load images.
+
 1.2 Enabling the secure boot support in U-Boot
 -----------------------------------------------
 
@@ -138,10 +155,13 @@ configuration:
 - Defconfig:
 
   CONFIG_IMX_HAB=y
+  CONFIG_IMX_SPL_FIT_FDT_SIGNATURE=y (Optional, for FIT FDT signature only)
 
 - Kconfig:
 
   ARM architecture -> Support i.MX HAB features
+
+The U-Boot image must then be recompiled after these changes are made.
 
 1.3 Preparing the fit image
 ----------------------------
@@ -150,9 +170,10 @@ The imx-mkimage project is used to combines all the images in a single
 flash.bin binary, the following files are required:
 
 - U-Boot:
+  u-boot.bin
   u-boot-nodtb.bin
   u-boot-spl.bin
-  U-Boot DTB file (e.g. fsl-imx8mq-evk.dtb)
+  U-Boot DTB file (e.g. imx8mp-evk.dtb)
 
 - ATF image:
   bl31.bin
@@ -176,6 +197,10 @@ The procedure to build ATF and download the firmwares are out of the scope
 of this document, please refer to the Linux BSP Release Notes and AN12212[2]
 for further details.
 
+Note: Depending on the version of firmware being used, the lpddr4
+filenames may need to be appended or changed if Make errors are encountered.
+(e.g. lpddr4_*mem.bin -> lpddr4_*mem_202006.bin)
+
 Copy all files to iMX8M directory and run the following command according to
 the target device, on this example we are building a HDMI target and also
 including the OP-TEE binary:
@@ -197,9 +222,11 @@ parameters and CSF offsets:
    spl hab block: 	0x7e0fd0 0x1a000 0x2e600
 
   Second Loader IMAGE:
-   sld_header_off 	0x57c00
-   sld_csf_off 		0x58c20
-   sld hab block: 	0x401fcdc0 0x57c00 0x1020
+   sld_header_off  0x57c00
+   sld_csf_off        0x58c20
+   sld hab block:    0x401fadc0 0x57c00 0x1020
+   fit-fdt csf_off  0x5ac20
+   fit-fdt hab block:  0x401fadc0 0x57c00 0x3020
 
 Additional HAB information is provided by running the following command:
 
@@ -209,17 +236,42 @@ Additional HAB information is provided by running the following command:
 
   TEE_LOAD_ADDR=0xfe000000 ATF_LOAD_ADDR=0x00910000 ./print_fit_hab.sh \
   0x60000 fsl-imx8mq-evk.dtb
-  0x40200000 0x5AC00 0x9AAC8
-  0x910000 0xF56C8 0x9139
-  0xFE000000 0xFE804 0x4D268
-  0x4029AAC8 0x14BA6C 0x6DCF
+  0x40200000 0x5CC00 0x9AAC8
+  0x910000 0xF76C8 0x9139
+  0xFE000000 0x100804 0x4D268
+  0x4029AAC8 0x14DA6C 0x6DCF
+
+If problems are encountered while using mkimage, please refer to the Linux
+User Guide which can be found alongside the latest Linux BSP release.
 
 1.4 Creating the CSF description file
 --------------------------------------
 
 The CSF contains all the commands that the ROM executes during the secure
 boot. These commands instruct the HAB code on which memory areas of the image
-to authenticate, which keys to install, use and etc.
+to authenticate, which keys to install, use and etc. More information
+on constructing a CSF file can be found in the CST User Guide, located
+within the CST package's doc directory.
+
+Key and Certificate generation done by the CST is out of the scope of
+this document. Please refer to introduction_habv4.txt for keys,
+certificates, SRK table, and SRK hash generation.
+The resulting file locations should be inserted into the CSF files like this:
+
+- Insertion into both csf_spl.txt, csf_fit.txt, and csf_fit_fdt.txt (optional)
+
+For Example:
+
+  [Install SRK]
+    File = "<relative_path>/crts/SRK_1_2_3_4_table.bin"
+    ...
+
+  [Install CSFK]
+    File = "<relative_path>/crts/CSF1_1_sha256_2048_65537_v3_usr_crt.pem"
+
+  [Install Key]
+    ...
+    File = "<relative_path>/crts/IMG1_1_sha256_2048_65537_v3_usr_crt.pem"
 
 CSF examples are available under doc/imx/hab/habv4/csf_examples/ directory.
 
@@ -228,7 +280,8 @@ and the root of trust is extended to the FIT image, hence two CSF files are
 necessary to completely sign an flash.bin image.
 
 The build log provided by imx-mkimage can be used to define the "Authenticate
-Data" parameter in CSF.
+Data" parameter in CSF. The addresses supplied in the build log will be
+needed again for binary insertion.
 
 - SPL "Authenticate Data" addresses in flash.bin build log:
 
@@ -236,7 +289,11 @@ Data" parameter in CSF.
 
 - "Authenticate Data" command in csf_spl.txt file:
 
-  Blocks = 0x7e0fd0 0x1a000 0x2e600 "flash.bin"
+  For example:
+
+  [Authenticate Data]
+    ...
+    Blocks = 0x7e0fd0 0x1a000 0x2e600 "flash.bin"
 
 - FIT image "Authenticate Data" addresses in flash.bin build log:
 
@@ -244,18 +301,34 @@ Data" parameter in CSF.
 
 - FIT image "Authenticate Data" addresses in print_fit_hab build log:
 
-  0x40200000 0x5AC00 0x9AAC8
-  0x910000 0xF56C8 0x9139
-  0xFE000000 0xFE804 0x4D268
-  0x4029AAC8 0x14BA6C 0x6DCF
+  0x40200000 0x5CC00 0x9AAC8
+  0x910000 0xF76C8 0x9139
+  0xFE000000 0x100804 0x4D268
+  0x4029AAC8 0x14DA6C 0x6DCF
 
 - "Authenticate Data" command in csf_fit.txt file:
 
-  Blocks = 0x401fcdc0 0x057c00 0x01020 "flash.bin", \
-           0x40200000 0x05AC00 0x9AAC8 "flash.bin", \
-           0x00910000 0x0F56C8 0x09139 "flash.bin", \
-           0xFE000000 0x0FE804 0x4D268 "flash.bin", \
-           0x4029AAC8 0x14BA6C 0x06DCF "flash.bin"
+  For example:
+
+  [Authenticate Data]
+    ...
+    Blocks = 0x401fadc0 0x057c00 0x1020 "flash.bin", \
+           0x40200000 0x05CC00 0x9AAC8 "flash.bin", \
+           0x00910000 0x0F76C8 0x09139 "flash.bin", \
+           0xFE000000 0x100804 0x4D268 "flash.bin", \
+           0x4029AAC8 0x14DA6C 0x06DCF "flash.bin"
+
+- (Optional) FIT FDT signature "Authenticate Data" addresses in flash.bin build log:
+
+   fit-fdt hab block:  0x401fadc0 0x57c00 0x3020
+
+- (Optional) "Authenticate Data" command in csf_fit_fdt.txt file:
+
+  For example:
+
+  [Authenticate Data]
+    ...
+    Blocks = 0x401fadc0 0x57c00 0x3020 "signed-flash.bin"
 
 1.4.1 Avoiding Kernel crash in closed devices
 ----------------------------------------------
@@ -311,6 +384,10 @@ The CSF offsets can be obtained from the flash.bin build log:
 
   sld_csf_off 0x58c20
 
+- (Optional) FIT FDT CSF offset:
+
+  fit-fdt csf_off  0x5ac20
+
 The signed flash.bin image can be then assembled:
 
 - Create a flash.bin copy:
@@ -325,9 +402,24 @@ The signed flash.bin image can be then assembled:
 
   $ dd if=csf_fit.bin of=signed_flash.bin seek=$((0x58c20)) bs=1 conv=notrunc
 
+(Optional) If FIT FDT signature is used, users need to continue sign the signed_flash.bin
+with csf_fit_fdt.txt CSF file
+
+- (Optional) Create FIT FDT CSF binary file (must after signed_flash.bin is generated):
+
+ $ ./cst -i csf_fit_fdt.txt -o csf_fit_fdt.bin
+
+- (Optional) Insert csf_fit_fdt.bin in signed_flash.bin at 0x5ac20 offset:
+
+  $ dd if=csf_fit_fdt.bin of=signed_flash.bin seek=$((0x5ac20)) bs=1 conv=notrunc
+
 - Flash signed flash.bin image:
 
   $ sudo dd if=signed_flash.bin of=/dev/sd<x> bs=1K seek=33 && sync
+
+Note: The Universal Update Utility (UUU) can also be used to flash the
+image to the target board's eMMC. Details on UUU installation and help
+can be found in the supporting UUU documentation[3].
 
 1.7 Programming SRK Hash
 -------------------------
@@ -338,6 +430,9 @@ SoC SRK_HASH[255:0] fuses.
 
 Be careful when programming these values, as this data is the basis for the
 root of trust. An error in SRK Hash results in a part that does not boot.
+More information and full details regarding fuses can be found in the
+Security Reference Manual of the target board. Contact an NXP Representative
+for access.
 
 The U-Boot fuse tool can be used for programming eFuses on i.MX SoCs.
 
@@ -407,23 +502,13 @@ signed using the correct PKI tree.
 Additional fuses can be programmed for completely secure the device, more
 details about these fuses and their possible impact can be found at AN4581[1].
 
-- Program SRK_LOCK:
+2. Secure boot in SDP mode
+---------------------------
 
-  => fuse prog 0 0 0x200
+For secure boot in SDP mode, please refer to the "HABv4 closed chip support"
+chapter in the UUU documentation[3].
 
-- Program DIR_BT_DIS:
-
-  => fuse prog 1 3 0x8000000
-
-- Program SJC_DISABLE:
-
-  => fuse prog 1 3 0x200000
-
-- JTAG_SMODE:
-
-  => fuse prog 1 3 0xC00000
-
-2. Authenticating additional boot images
+3. Authenticating additional boot images
 -----------------------------------------
 
 The High Assurance Boot (HAB) code located in the on-chip ROM provides an
@@ -461,7 +546,7 @@ The diagram below illustrate the Image layout:
                     |     Padding (optional)      |
                     +-----------------------------+
 
-2.1 Padding the image
+3.1 Padding the image
 ----------------------
 
 The Image must be padded to the size specified in the Image header, this can be
@@ -480,7 +565,7 @@ The tool objcopy can be used for padding the image.
   $ objcopy -I binary -O binary --pad-to 0x1455000 --gap-fill=0x00 \
 	Image Image_pad.bin
 
-2.2 Generating Image Vector Table
+3.2 Generating Image Vector Table
 ----------------------------------
 
 The HAB code requires an Image Vector Table (IVT) for determining the image
@@ -498,7 +583,7 @@ Note: The load Address may change depending on the device.
 
   $ cat Image_pad.bin ivt.bin > Image_pad_ivt.bin
 
-2.3 Signing the image
+3.3 Signing the image
 ----------------------
 
 A CSF file has to be created to sign the image. HAB does not allow to change
@@ -515,7 +600,7 @@ CSF examples are available in ../csf_examples/additional_images/ directory.
 
   $ cat Image_pad_ivt.bin csf_Image.bin > Image_signed.bin
 
-2.4 Verifying HAB events
+3.4 Verifying HAB events
 -------------------------
 
 The U-Boot includes the hab_auth_img command which can be used for
@@ -529,7 +614,6 @@ loaded at the load address specified in the IVT.
 If no HAB events were found the Image is successfully signed.
 
 References:
-[1] AN4581: "Secure Boot on i.MX 50, i.MX 53, i.MX 6 and i.MX 7 Series using
- HABv4" - Rev 2.
-[2] AN12212: "Software Solutions for Migration Guide from Aarch32 to
-Aarch64" - Rev 0.
+[1] AN4581: "i.MX Secure Boot on HABv4 Supported Devices"
+[2] AN12212: "Software Solutions for Migration Guide from Aarch32 to Aarch64"
+[3] https://github.com/NXPmicro/mfgtools/releases/

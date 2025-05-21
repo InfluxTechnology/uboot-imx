@@ -17,6 +17,7 @@
 #include <common.h>
 #include <command.h>
 #include <dm.h>
+#include <log.h>
 #include <rtc.h>
 #include <i2c.h>
 
@@ -163,13 +164,13 @@ void rtc_enable_32khz_output(void)
 static
 uchar rtc_read (uchar reg)
 {
-	return (i2c_reg_read (CONFIG_SYS_I2C_RTC_ADDR, reg));
+	return (i2c_reg_read (CFG_SYS_I2C_RTC_ADDR, reg));
 }
 
 
 static void rtc_write (uchar reg, uchar val)
 {
-	i2c_reg_write (CONFIG_SYS_I2C_RTC_ADDR, reg, val);
+	i2c_reg_write (CFG_SYS_I2C_RTC_ADDR, reg, val);
 }
 #else
 static int ds3231_rtc_get(struct udevice *dev, struct rtc_time *tmp)

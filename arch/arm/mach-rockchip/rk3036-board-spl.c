@@ -5,6 +5,7 @@
 
 #include <common.h>
 #include <debug_uart.h>
+#include <init.h>
 #include <asm/io.h>
 #include <asm/arch-rockchip/bootrom.h>
 #include <asm/arch-rockchip/sdram_rk3036.h>
@@ -19,7 +20,7 @@
 void rockchip_stimer_init(void)
 {
 	asm volatile("mcr p15, 0, %0, c14, c0, 0"
-		     : : "r"(COUNTER_FREQUENCY));
+		     : : "r"(CONFIG_COUNTER_FREQUENCY));
 
 	writel(0, CONFIG_ROCKCHIP_STIMER_BASE + TIMER_CONTROL_REG);
 	writel(0xffffffff, CONFIG_ROCKCHIP_STIMER_BASE);

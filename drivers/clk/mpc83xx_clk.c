@@ -7,11 +7,15 @@
 #include <common.h>
 #include <clk-uclass.h>
 #include <clock_legacy.h>
+#include <command.h>
 #include <dm.h>
+#include <log.h>
 #include <vsprintf.h>
+#include <asm/global_data.h>
 #include <dm/lists.h>
 #include <dt-bindings/clk/mpc83xx-clk.h>
 #include <asm/arch/soc.h>
+#include <linux/bitops.h>
 
 #include "mpc83xx_clk.h"
 
@@ -342,8 +346,10 @@ static int mpc83xx_clk_probe(struct udevice *dev)
 
 	type = dev_get_driver_data(dev);
 
+#ifdef CONFIG_FSL_ESDHC
 	if (mpc83xx_has_sdhc(type))
 		gd->arch.sdhc_clk = priv->speed[MPC83XX_CLK_SDHC];
+#endif
 
 	gd->arch.core_clk = priv->speed[MPC83XX_CLK_CORE];
 	gd->arch.i2c1_clk = priv->speed[MPC83XX_CLK_I2C1];
@@ -357,6 +363,11 @@ static int mpc83xx_clk_probe(struct udevice *dev)
 
 	gd->cpu_clk = priv->speed[MPC83XX_CLK_CORE];
 	gd->bus_clk = priv->speed[MPC83XX_CLK_CSB];
+
+#ifdef CONFIG_QE
+	gd->arch.qe_clk = priv->speed[MPC83XX_CLK_QE];
+	gd->arch.brg_clk = priv->speed[MPC83XX_CLK_BRG];
+#endif
 
 	return 0;
 }
@@ -386,11 +397,12 @@ U_BOOT_DRIVER(mpc83xx_clk) = {
 	.of_match = mpc83xx_clk_match,
 	.ops = &mpc83xx_clk_ops,
 	.probe = mpc83xx_clk_probe,
-	.priv_auto_alloc_size	= sizeof(struct mpc83xx_clk_priv),
+	.priv_auto	= sizeof(struct mpc83xx_clk_priv),
 	.bind = mpc83xx_clk_bind,
 };
 
-static int do_clocks(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+static int do_clocks(struct cmd_tbl *cmdtp, int flag, int argc,
+		     char *const argv[])
 {
 	int i;
 	char buf[32];

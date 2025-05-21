@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright 2016 Freescale Semiconductor, Inc.
+ * Copyright 2021 NXP
  */
 
 #include <common.h>
+#include <command.h>
 #include <fdt_support.h>
 #include <hang.h>
 #include <i2c.h>
+#include <asm/cache.h>
+#include <init.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/fsl_serdes.h>
-#ifdef CONFIG_FSL_LS_PPA
-#include <asm/arch/ppa.h>
-#endif
 #include <asm/arch/mmu.h>
 #include <asm/arch/soc.h>
 #include <hwconfig.h>
@@ -23,7 +25,7 @@
 #include <env_internal.h>
 #include <fsl_mmdc.h>
 #include <netdev.h>
-#include <fsl_sec.h>
+#include <net/pfe_eth/pfe/pfe_hw.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -39,7 +41,7 @@ int checkboard(void)
 	puts("Board: LS1012ARDB ");
 
 	/* Initialize i2c early for Serial flash bank information */
-#if defined(CONFIG_DM_I2C)
+#if CONFIG_IS_ENABLED(DM_I2C)
 	struct udevice *dev;
 
 	ret = i2c_get_chip_for_busnum(bus_num, I2C_MUX_IO_ADDR,
@@ -108,7 +110,7 @@ int dram_init(void)
 {
 	gd->ram_size = tfa_get_dram_size();
 	if (!gd->ram_size)
-		gd->ram_size = CONFIG_SYS_SDRAM_SIZE;
+		gd->ram_size = CFG_SYS_SDRAM_SIZE;
 
 	return 0;
 }
@@ -135,7 +137,7 @@ int dram_init(void)
 	mmdc_init(&mparam);
 #endif
 
-	gd->ram_size = CONFIG_SYS_SDRAM_SIZE;
+	gd->ram_size = CFG_SYS_SDRAM_SIZE;
 #if !defined(CONFIG_SPL) || defined(CONFIG_SPL_BUILD)
 	/* This will break-before-make MMU for DDR */
 	update_early_mmu_table();
@@ -168,30 +170,26 @@ int board_init(void)
 	erratum_a010315();
 #endif
 
-#ifdef CONFIG_ENV_IS_NOWHERE
-	gd->env_addr = (ulong)&default_environment[0];
-#endif
-
-#ifdef CONFIG_FSL_CAAM
-	sec_init();
-#endif
-
-#ifdef CONFIG_FSL_LS_PPA
-	ppa_init();
-#endif
 	return 0;
 }
+
+#ifdef CONFIG_FSL_PFE
+void board_quiesce_devices(void)
+{
+	pfe_command_stop(0, NULL);
+}
+#endif
 
 #ifdef CONFIG_TARGET_LS1012ARDB
 int esdhc_status_fixup(void *blob, const char *compat)
 {
-	char esdhc1_path[] = "/soc/esdhc@1580000";
+	char *esdhc1_path = "/soc/mmc@1580000";
 	bool sdhc2_en = false;
 	u8 mux_sdhc2;
 	u8 io = 0;
 	int ret, bus_num = 0;
 
-#if defined(CONFIG_DM_I2C)
+#if CONFIG_IS_ENABLED(DM_I2C)
 	struct udevice *dev;
 
 	ret = i2c_get_chip_for_busnum(bus_num, I2C_MUX_IO_ADDR,
@@ -230,7 +228,7 @@ int esdhc_status_fixup(void *blob, const char *compat)
 		 *	10 - eMMC Memory
 		 *	11 - SPI
 		 */
-#if defined(CONFIG_DM_I2C)
+#if CONFIG_IS_ENABLED(DM_I2C)
 		ret = dm_i2c_read(dev, I2C_MUX_IO_0, &io, 1);
 #else
 		ret = i2c_read(I2C_MUX_IO_ADDR, I2C_MUX_IO_0, 1, &io, 1);
@@ -245,6 +243,10 @@ int esdhc_status_fixup(void *blob, const char *compat)
 		if (mux_sdhc2 == 2 || mux_sdhc2 == 0)
 			sdhc2_en = true;
 	}
+
+	if (fdt_path_offset(blob, esdhc1_path) < 0)
+		esdhc1_path = "/soc/esdhc@1580000";
+
 	if (sdhc2_en)
 		do_fixup_by_path(blob, esdhc1_path, "status", "okay",
 				 sizeof("okay"), 1);
@@ -255,7 +257,7 @@ int esdhc_status_fixup(void *blob, const char *compat)
 }
 #endif
 
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	arch_fixup_fdt(blob);
 
@@ -269,7 +271,7 @@ static int switch_to_bank1(void)
 	u8 data = 0xf4, chip_addr = 0x24, offset_addr = 0x03;
 	int ret, bus_num = 0;
 
-#if defined(CONFIG_DM_I2C)
+#if CONFIG_IS_ENABLED(DM_I2C)
 	struct udevice *dev;
 
 	ret = i2c_get_chip_for_busnum(bus_num, chip_addr,
@@ -334,7 +336,7 @@ static int switch_to_bank2(void)
 	u8 chip_addr = 0x24;
 	int ret, i, bus_num = 0;
 
-#if defined(CONFIG_DM_I2C)
+#if CONFIG_IS_ENABLED(DM_I2C)
 	struct udevice *dev;
 
 	ret = i2c_get_chip_for_busnum(bus_num, chip_addr,
@@ -357,7 +359,7 @@ static int switch_to_bank2(void)
 	 *	  CS routed to SPI memory bank2
 	 */
 	for (i = 0; i < sizeof(data); i++) {
-#if defined(CONFIG_DM_I2C)
+#if CONFIG_IS_ENABLED(DM_I2C)
 		ret = dm_i2c_write(dev, offset_addr[i], &data[i], 1);
 #else /* Non DM I2C support - will be removed */
 		ret = i2c_write(chip_addr, offset_addr[i], 1, &data[i], 1);
@@ -392,8 +394,8 @@ static int convert_flash_bank(int bank)
 	return ret;
 }
 
-static int flash_bank_cmd(cmd_tbl_t *cmdtp, int flag, int argc,
-			  char * const argv[])
+static int flash_bank_cmd(struct cmd_tbl *cmdtp, int flag, int argc,
+			  char *const argv[])
 {
 	if (argc != 2)
 		return CMD_RET_USAGE;

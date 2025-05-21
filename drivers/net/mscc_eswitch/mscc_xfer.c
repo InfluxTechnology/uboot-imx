@@ -3,6 +3,10 @@
  * Copyright (c) 2018 Microsemi Corporation
  */
 
+#include <errno.h>
+#include <log.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
 #include <linux/io.h>
 #include "mscc_xfer.h"
 

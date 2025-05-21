@@ -6,7 +6,9 @@
 
 #include <common.h>
 #include <clock_legacy.h>
+#include <command.h>
 #include <div64.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <errno.h>
 #include <asm/arch/clock.h>
@@ -17,9 +19,9 @@ DECLARE_GLOBAL_DATA_PTR;
 int get_clocks(void)
 {
 #ifdef CONFIG_FSL_ESDHC_IMX
-#if CONFIG_SYS_FSL_ESDHC_ADDR == USDHC0_RBASE
+#if CFG_SYS_FSL_ESDHC_ADDR == USDHC0_RBASE
 	gd->arch.sdhc_clk = mxc_get_clock(MXC_ESDHC_CLK);
-#elif CONFIG_SYS_FSL_ESDHC_ADDR == USDHC1_RBASE
+#elif CFG_SYS_FSL_ESDHC_ADDR == USDHC1_RBASE
 	gd->arch.sdhc_clk = mxc_get_clock(MXC_ESDHC2_CLK);
 #endif
 #endif
@@ -114,6 +116,42 @@ u32 imx_get_i2cclk(unsigned i2c_num)
 }
 #endif
 
+#ifdef CONFIG_FSL_LPSPI
+int enable_lpspi_clk(unsigned char enable, unsigned spi_num)
+{
+	/* Set parent to FIRC DIV2 clock */
+	const enum pcc_clk lpspi_pcc_clks[] = {
+		PER_CLK_LPSPI2,
+		PER_CLK_LPSPI3,
+	};
+
+	if (spi_num < 2 || spi_num > 3)
+		return -EINVAL;
+
+	if (enable) {
+		pcc_clock_enable(lpspi_pcc_clks[spi_num - 2], false);
+		pcc_clock_sel(lpspi_pcc_clks[spi_num - 2], SCG_FIRC_DIV2_CLK);
+		pcc_clock_enable(lpspi_pcc_clks[spi_num - 2], true);
+	} else {
+		pcc_clock_enable(lpspi_pcc_clks[spi_num - 2], false);
+	}
+	return 0;
+}
+
+u32 imx_get_spiclk(unsigned spi_num)
+{
+	const enum pcc_clk lpspi_pcc_clks[] = {
+		PER_CLK_LPSPI2,
+		PER_CLK_LPSPI3,
+	};
+
+	if (spi_num < 2 || spi_num > 3)
+		return 0;
+
+	return pcc_clock_get_rate(lpspi_pcc_clks[spi_num - 2]);
+}
+#endif
+
 unsigned int mxc_get_clock(enum mxc_clock clk)
 {
 	switch (clk) {
@@ -127,6 +165,8 @@ unsigned int mxc_get_clock(enum mxc_clock clk)
 		return get_ipg_clk();
 	case MXC_I2C_CLK:
 		return pcc_clock_get_rate(PER_CLK_LPI2C4);
+	case MXC_LPSPI_CLK:
+		return pcc_clock_get_rate(PER_CLK_LPSPI3);
 	case MXC_UART_CLK:
 		return get_lpuart_clk();
 	case MXC_ESDHC_CLK:
@@ -218,6 +258,11 @@ void enable_usboh3_clk(unsigned char enable)
 		pcc_clock_enable(PER_CLK_USB_PHY, false);
 		pcc_clock_enable(PER_CLK_USB_PL301, false);
 	}
+}
+
+int enable_usb_pll(ulong usb_phy_base)
+{
+	return scg_enable_usb_pll(true);
 }
 
 static void lpuart_set_clk(uint32_t index, enum scg_clk clk)
@@ -412,9 +457,10 @@ void mxs_set_lcdclk(uint32_t base_addr, uint32_t freq_in_khz)
 /*
  * Dump some core clockes.
  */
-int do_mx7_showclocks(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+int do_mx7_showclocks(struct cmd_tbl *cmdtp, int flag, int argc,
+		      char *const argv[])
 {
-	u32 addr = 0;
+
 	u32 freq;
 	freq = decode_pll(PLL_A7_SPLL);
 	printf("PLL_A7_SPLL    %8d MHz\n", freq / 1000000);
@@ -423,7 +469,7 @@ int do_mx7_showclocks(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	printf("PLL_A7_APLL    %8d MHz\n", freq / 1000000);
 
 	freq = decode_pll(PLL_USB);
-	printf("PLL_USB    %8d MHz\n", freq / 1000000);
+	printf("PLL_USB        %8d MHz\n", freq / 1000000);
 
 	printf("\n");
 
@@ -437,8 +483,6 @@ int do_mx7_showclocks(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	printf("USDHC2     %8d kHz\n", mxc_get_clock(MXC_ESDHC2_CLK) / 1000);
 	printf("I2C4       %8d kHz\n", mxc_get_clock(MXC_I2C_CLK) / 1000);
 
-	addr = (u32) clock_init;
-	printf("[%s] addr = 0x%08X\r\n", __func__, addr);
 	scg_a7_info();
 
 	return 0;

@@ -9,11 +9,13 @@
 
 #include <common.h>
 #include <dm.h>
+#include <log.h>
 #include <asm/gpio.h>
 #include <asm/io.h>
 #include <errno.h>
 #include <clk.h>
 #include <dm/device_compat.h>
+#include <linux/bitops.h>
 #include <linux/err.h>
 
 #define MSCC_SGPIOS_PER_BANK	32
@@ -230,7 +232,7 @@ static int mscc_sgpio_probe(struct udevice *dev)
 	debug("probe: gpios = %d, bit-count = %d\n",
 	      uc_priv->gpio_count, priv->bitcount);
 
-	priv->regs = (u32 __iomem *)dev_read_addr(dev);
+	priv->regs = dev_read_addr_ptr(dev);
 	uc_priv->bank_name = "sgpio";
 
 	sgpio_clrsetbits(priv, REG_SIO_CONFIG, 0,
@@ -273,5 +275,5 @@ U_BOOT_DRIVER(gpio_mscc_sgpio) = {
 	.of_match		= mscc_sgpio_ids,
 	.ops			= &mscc_sgpio_ops,
 	.probe			= mscc_sgpio_probe,
-	.priv_auto_alloc_size	= sizeof(struct mscc_sgpio_priv),
+	.priv_auto	= sizeof(struct mscc_sgpio_priv),
 };

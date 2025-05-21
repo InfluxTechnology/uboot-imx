@@ -1,8 +1,11 @@
 menu "Hardware crypto devices"
 
-config CAAM_KB_SELF_TEST
-	bool "Freescale CAAM SELF TEST"
+source drivers/crypto/hash/Kconfig
 
 source drivers/crypto/fsl/Kconfig
+
+source drivers/crypto/aspeed/Kconfig
+
+source drivers/crypto/nuvoton/Kconfig
 
 endmenu

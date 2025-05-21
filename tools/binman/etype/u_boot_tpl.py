@@ -5,10 +5,8 @@
 # Entry-type module for tpl/u-boot-tpl.bin
 #
 
-import elf
-
-from entry import Entry
-from blob import Entry_blob
+from binman.entry import Entry
+from binman.etype.blob import Entry_blob
 
 class Entry_u_boot_tpl(Entry_blob):
     """U-Boot TPL binary
@@ -23,21 +21,19 @@ class Entry_u_boot_tpl(Entry_blob):
     address in SRAM, or written to run from the correct address if direct
     flash execution is possible (e.g. on x86 devices).
 
-    SPL can access binman symbols at runtime. See:
-
-        'Access to binman entry offsets at run time (symbols)'
+    SPL can access binman symbols at runtime. See :ref:`binman_fdt`.
 
     in the binman README for more information.
 
     The ELF file 'tpl/u-boot-tpl' must also be available for this to work, since
     binman uses that to look up symbols to write into the TPL binary.
+
+    Note that this entry is automatically replaced with u-boot-tpl-expanded
+    unless --no-expanded is used or the node has a 'no-expanded' property.
     """
     def __init__(self, section, etype, node):
-        Entry_blob.__init__(self, section, etype, node)
+        super().__init__(section, etype, node, auto_write_symbols=True)
         self.elf_fname = 'tpl/u-boot-tpl'
 
     def GetDefaultFilename(self):
         return 'tpl/u-boot-tpl.bin'
-
-    def WriteSymbols(self, section):
-        elf.LookupAndWriteSymbols(self.elf_fname, self, section.GetImage())

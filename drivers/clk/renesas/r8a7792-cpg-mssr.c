@@ -9,9 +9,9 @@
  * Copyright (C) 2013 Ideas On Board SPRL
  */
 
-#include <common.h>
 #include <clk-uclass.h>
 #include <dm.h>
+#include <linux/bitops.h>
 
 #include <dt-bindings/clock/r8a7792-cpg-mssr.h>
 
@@ -36,7 +36,7 @@ enum clk_ids {
 	MOD_CLK_BASE
 };
 
-static const struct cpg_core_clk r8a7792_core_clks[] = {
+static const struct cpg_core_clk r8a7792_core_clks[] __initconst = {
 	/* External Clock Inputs */
 	DEF_INPUT("extal",     CLK_EXTAL),
 
@@ -75,7 +75,7 @@ static const struct cpg_core_clk r8a7792_core_clks[] = {
 	DEF_FIXED("osc",    R8A7792_CLK_OSC,   CLK_PLL1,      12288, 1),
 };
 
-static const struct mssr_mod_clk r8a7792_mod_clks[] = {
+static const struct mssr_mod_clk r8a7792_mod_clks[] __initconst = {
 	DEF_MOD("msiof0",		   0,	R8A7792_CLK_MP),
 	DEF_MOD("jpu",			 106,	R8A7792_CLK_M2),
 	DEF_MOD("tmu1",			 111,	R8A7792_CLK_P),
@@ -87,7 +87,7 @@ static const struct mssr_mod_clk r8a7792_mod_clks[] = {
 	DEF_MOD("tmu0",			 125,	R8A7792_CLK_CP),
 	DEF_MOD("vsp1du1",		 127,	R8A7792_CLK_ZS),
 	DEF_MOD("vsp1du0",		 128,	R8A7792_CLK_ZS),
-	DEF_MOD("vsp1-sy",		 131,	R8A7792_CLK_ZS),
+	DEF_MOD("vsps",			 131,	R8A7792_CLK_ZS),
 	DEF_MOD("msiof1",		 208,	R8A7792_CLK_MP),
 	DEF_MOD("sys-dmac1",		 218,	R8A7792_CLK_ZS),
 	DEF_MOD("sys-dmac0",		 219,	R8A7792_CLK_ZS),
@@ -173,7 +173,7 @@ static const struct mssr_mod_clk r8a7792_mod_clks[] = {
 #define CPG_PLL_CONFIG_INDEX(md)	((((md) & BIT(14)) >> 12) | \
 					 (((md) & BIT(13)) >> 12) | \
 					 (((md) & BIT(19)) >> 19))
-static const struct rcar_gen2_cpg_pll_config cpg_pll_configs[8] = {
+static const struct rcar_gen2_cpg_pll_config cpg_pll_configs[8] __initconst = {
 	{ 1, 208, 106, 200 },
 	{ 1, 208,  88, 200 },
 	{ 1, 156,  80, 150 },
@@ -212,6 +212,7 @@ static const struct cpg_mssr_info r8a7792_cpg_mssr_info = {
 	.mstp_table		= r8a7792_mstp_table,
 	.mstp_table_size	= ARRAY_SIZE(r8a7792_mstp_table),
 	.reset_node		= "renesas,r8a7792-rst",
+	.reset_modemr_offset	= CPG_RST_MODEMR,
 	.mod_clk_base		= MOD_CLK_BASE,
 	.clk_extal_id		= CLK_EXTAL,
 	.pll0_div		= 2,
@@ -234,7 +235,7 @@ U_BOOT_DRIVER(clk_r8a7792) = {
 	.name		= "clk_r8a7792",
 	.id		= UCLASS_CLK,
 	.of_match	= r8a7792_clk_ids,
-	.priv_auto_alloc_size = sizeof(struct gen2_clk_priv),
+	.priv_auto	= sizeof(struct gen2_clk_priv),
 	.ops		= &gen2_clk_ops,
 	.probe		= gen2_clk_probe,
 	.remove		= gen2_clk_remove,

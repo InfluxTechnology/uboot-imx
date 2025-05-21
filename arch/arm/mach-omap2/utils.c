@@ -5,9 +5,11 @@
  */
 #include <common.h>
 #include <env.h>
+#include <part.h>
 #include <asm/setup.h>
 #include <asm/arch/sys_proto.h>
 #include <asm/omap_common.h>
+#include <linux/printk.h>
 
 static void do_cancel_out(u32 *num, u32 *den, u32 factor)
 {
@@ -90,7 +92,7 @@ static u32 omap_mmc_get_part_size(const char *part)
 {
 	int res;
 	struct blk_desc *dev_desc;
-	disk_partition_t info;
+	struct disk_partition info;
 	u64 sz = 0;
 
 	dev_desc = blk_get_dev("mmc", CONFIG_FASTBOOT_FLASH_MMC_DEV);
@@ -99,8 +101,7 @@ static u32 omap_mmc_get_part_size(const char *part)
 		return 0;
 	}
 
-	/* Check only for EFI (GPT) partition table */
-	res = part_get_info_by_name_type(dev_desc, part, &info, PART_TYPE_EFI);
+	res = part_get_info_by_name(dev_desc, part, &info);
 	if (res < 0)
 		return 0;
 

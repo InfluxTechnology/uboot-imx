@@ -9,36 +9,27 @@
  * Board functions for TI AM335X based boards
  * u-boot:/board/ti/am335x/board.c
  *
- * Copyright (C) 2011, Texas Instruments, Incorporated - http://www.ti.com/
+ * Copyright (C) 2011, Texas Instruments, Incorporated - https://www.ti.com/
  */
 
-#include <common.h>
-#include <env.h>
-#include <errno.h>
-#include <init.h>
-#include <spl.h>
-#include <asm/arch/cpu.h>
-#include <asm/arch/hardware.h>
-#include <asm/arch/omap.h>
-#include <asm/arch/ddr_defs.h>
-#include <asm/arch/clock.h>
-#include <asm/arch/gpio.h>
-#include <asm/arch/mmc_host_def.h>
-#include <asm/arch/sys_proto.h>
-#include <asm/arch/mem.h>
-#include <asm/io.h>
-#include <asm/emif.h>
-#include <asm/gpio.h>
-#include <i2c.h>
-#include <miiphy.h>
+#include <command.h>
 #include <cpsw.h>
-#include <watchdog.h>
-#include "board.h"
-#include "../common/factoryset.h"
+#include <env.h>
+#include <init.h>
+#include <linux/delay.h>
 #include <nand.h>
+#include <asm/arch/clock.h>
+#include <asm/arch/ddr_defs.h>
+#include <asm/arch/mem.h>
+#include <asm/arch/sys_proto.h>
+#include <asm/gpio.h>
+#include <asm/io.h>
+#include "board.h"
+#include "../common/eeprom.h"
+#include "../common/factoryset.h"
 
 #ifdef CONFIG_SPL_BUILD
-static struct draco_baseboard_id __attribute__((section(".data"))) settings;
+static struct draco_baseboard_id __section(".data") settings;
 
 #if DDR_PLL_FREQ == 303
 #if !defined(CONFIG_TARGET_ETAMIN)
@@ -134,8 +125,8 @@ static int draco_read_nand_geometry(void)
 	struct am335x_nand_geometry geo;
 
 	/* Read NAND geometry */
-	if (i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR, 0x80, 2,
-		     (uchar *)&geo, sizeof(struct am335x_nand_geometry))) {
+	if (siemens_ee_read_data(SIEMENS_EE_ADDR_NAND_GEO, (uchar *)&geo,
+				 sizeof(struct am335x_nand_geometry))) {
 		printf("Could not read the NAND geomtery; something fundamentally wrong on the I2C bus.\n");
 		return -EIO;
 	}
@@ -151,27 +142,21 @@ static int draco_read_nand_geometry(void)
 	return 0;
 }
 
+#ifdef CONFIG_SPL_BUILD
 /*
  * Read header information from EEPROM into global structure.
  */
-static int read_eeprom(void)
+int draco_read_eeprom(void)
 {
-	/* Check if baseboard eeprom is available */
-	if (i2c_probe(CONFIG_SYS_I2C_EEPROM_ADDR)) {
-		printf("Could not probe the EEPROM; something fundamentally wrong on the I2C bus.\n");
-		return 1;
-	}
-
-#ifdef CONFIG_SPL_BUILD
 	/* Read Siemens eeprom data (DDR3) */
-	if (i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR, EEPROM_ADDR_DDR3, 2,
-		     (uchar *)&settings.ddr3, sizeof(struct ddr3_data))) {
+	if (siemens_ee_read_data(SIEMENS_EE_ADDR_DDR3, (uchar *)&settings.ddr3,
+				 sizeof(struct ddr3_data))) {
 		printf("Could not read the EEPROM; something fundamentally wrong on the I2C bus.\nUse default DDR3 timings\n");
 		set_default_ddr3_timings();
 	}
 	/* Read Siemens eeprom data (CHIP) */
-	if (i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR, EEPROM_ADDR_CHIP, 2,
-		     (uchar *)&settings.chip, sizeof(settings.chip)))
+	if (siemens_ee_read_data(SIEMENS_EE_ADDR_CHIP, (uchar *)&settings.chip,
+				 sizeof(settings.chip)))
 		printf("Could not read chip settings\n");
 
 	if (ddr3_default.magic == settings.ddr3.magic &&
@@ -195,12 +180,9 @@ static int read_eeprom(void)
 	print_ddr3_timings();
 
 	return draco_read_nand_geometry();
-#endif
-	return 0;
 }
 
-#ifdef CONFIG_SPL_BUILD
-static void board_init_ddr(void)
+void draco_init_ddr(void)
 {
 struct emif_regs draco_ddr3_emif_reg_data = {
 	.zq_config = 0x50074BE4,
@@ -247,7 +229,7 @@ struct ctrl_ioregs draco_ddr3_ioregs = {
 		   &draco_ddr3_cmd_ctrl_data, &draco_ddr3_emif_reg_data, 0);
 }
 
-static void spl_siemens_board_init(void)
+void spl_draco_board_init(void)
 {
 	return;
 }
@@ -285,7 +267,7 @@ int board_late_init(void)
 #endif
 
 #if (defined(CONFIG_DRIVER_TI_CPSW) && !defined(CONFIG_SPL_BUILD)) || \
-	(defined(CONFIG_SPL_ETH_SUPPORT) && defined(CONFIG_SPL_BUILD))
+	(defined(CONFIG_SPL_ETH) && defined(CONFIG_SPL_BUILD))
 static void cpsw_control(int enabled)
 {
 	/* VTP can be added here */
@@ -323,7 +305,7 @@ static struct cpsw_platform_data cpsw_data = {
 
 #if defined(CONFIG_DRIVER_TI_CPSW) || \
 	(defined(CONFIG_USB_ETHER) && defined(CONFIG_USB_MUSB_GADGET))
-int board_eth_init(bd_t *bis)
+int board_eth_init(struct bd_info *bis)
 {
 	struct ctrl_dev *cdev = (struct ctrl_dev *)CTRL_DEVICE_BASE;
 	int n = 0;
@@ -342,8 +324,8 @@ int board_eth_init(bd_t *bis)
 	return n;
 }
 
-static int do_switch_reset(cmd_tbl_t *cmdtp, int flag, int argc,
-			  char *const argv[])
+static int do_switch_reset(struct cmd_tbl *cmdtp, int flag, int argc,
+			   char *const argv[])
 {
 	/* Reset SMSC LAN9303 switch for default configuration */
 	gpio_request(GPIO_LAN9303_NRST, "nRST");
@@ -362,24 +344,3 @@ U_BOOT_CMD(
 );
 #endif /* #if defined(CONFIG_DRIVER_TI_CPSW) */
 #endif /* #if (defined(CONFIG_DRIVER_TI_CPSW) && !defined(CONFIG_SPL_BUILD)) */
-
-#ifdef CONFIG_NAND_CS_INIT
-/* GPMC definitions for second nand cs1 */
-static const u32 gpmc_nand_config[] = {
-	ETAMIN_NAND_GPMC_CONFIG1,
-	ETAMIN_NAND_GPMC_CONFIG2,
-	ETAMIN_NAND_GPMC_CONFIG3,
-	ETAMIN_NAND_GPMC_CONFIG4,
-	ETAMIN_NAND_GPMC_CONFIG5,
-	ETAMIN_NAND_GPMC_CONFIG6,
-	/*CONFIG7- computed as params */
-};
-
-static void board_nand_cs_init(void)
-{
-	enable_gpmc_cs_config(gpmc_nand_config, &gpmc_cfg->cs[1],
-			      0x18000000, GPMC_SIZE_16M);
-}
-#endif
-
-#include "../common/board.c"

@@ -12,6 +12,7 @@ config SYS_SOC
 config SYS_CONFIG_NAME
 	default "mx7dea-com"
 
-config SYS_TEXT_BASE
-        default 0x87800000
+config IMX_CONFIG
+	default "board/embeddedartists/mx7dea-com/imximage.cfg"
+
 endif

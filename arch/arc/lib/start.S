@@ -7,6 +7,7 @@
 #include <config.h>
 #include <linux/linkage.h>
 #include <asm/arcregs.h>
+#include <system-constants.h>
 
 ENTRY(_start)
 	/* Setup interrupt vector base that matches "__text_start" */
@@ -61,6 +62,21 @@ ENTRY(_start)
 1:
 #endif
 
+#ifdef CONFIG_ISA_ARCV2
+	; In case of DSP extension presence in HW some instructions
+	; (related to integer multiply, multiply-accumulate, and divide
+	; operation) executes on this DSP execution unit. So their
+	; execution will depend on dsp configuration register (DSP_CTRL)
+	; As we want these instructions to execute the same way regardless
+	; of DSP presence we need to set DSP_CTRL properly.
+	lr	r5, [ARC_AUX_DSP_BUILD]
+	bmsk	r5, r5, 7
+	breq    r5, 0, 1f
+	mov	r5, 0
+	sr	r5, [ARC_AUX_DSP_CTRL]
+1:
+#endif
+
 #ifdef __ARC_UNALIGNED__
 	/*
 	 * Enable handling of unaligned access in the CPU as by default
@@ -71,7 +87,7 @@ ENTRY(_start)
 #endif
 
 	/* Establish C runtime stack and frame */
-	mov	%sp, CONFIG_SYS_INIT_SP_ADDR
+	mov	%sp, SYS_INIT_SP_ADDR
 	mov	%fp, %sp
 
 	/* Allocate reserved area from current top of stack */

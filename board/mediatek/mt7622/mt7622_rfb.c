@@ -6,12 +6,14 @@
 
 #include <common.h>
 #include <config.h>
+#include <env.h>
+#include <init.h>
+#include <asm/global_data.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
 int board_init(void)
 {
-	gd->bd->bi_boot_params = CONFIG_SYS_SDRAM_BASE + 0x100;
 	return 0;
 }
 

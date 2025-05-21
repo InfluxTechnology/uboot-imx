@@ -8,11 +8,15 @@
 
 / {
 	soc@1c00000 {
-		u-boot,dm-spl;
+		bootph-pre-ram;
 	};
 
 	nand {
 		compatible = "ti,davinci-nand";
+	};
+
+	panel {
+		bootph-all;
 	};
 };
 
@@ -25,13 +29,17 @@
 };
 
 &mmc0 {
-	u-boot,dm-spl;
+	bootph-pre-ram;
 };
 
 &serial2 {
-	u-boot,dm-spl;
+	bootph-pre-ram;
 };
 
 &spi1 {
-	u-boot,dm-spl;
+	bootph-pre-ram;
+};
+
+&gpio {
+	bootph-pre-ram;
 };

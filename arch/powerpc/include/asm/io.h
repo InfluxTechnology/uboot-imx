@@ -10,7 +10,10 @@
 #include <asm/byteorder.h>
 
 #ifdef CONFIG_ADDR_MAP
+#include <asm/global_data.h>
 #include <addr_map.h>
+
+DECLARE_GLOBAL_DATA_PTR;
 #endif
 
 #define SIO_CONFIG_RA   0x398
@@ -92,9 +95,9 @@ extern void _outsl_ns(volatile u32 *port, const void *buf, int nl);
 
 #define IO_SPACE_LIMIT ~0
 
-#define memset_io(a,b,c)       memset((void *)(a),(b),(c))
-#define memcpy_fromio(a,b,c)   memcpy((a),(void *)(b),(c))
-#define memcpy_toio(a,b,c)  memcpy((void *)(a),(b),(c))
+#define memset_io(a,b,c)       memset((void __force *)(a),(b),(c))
+#define memcpy_fromio(a,b,c)   memcpy((a),(void __force *)(b),(c))
+#define memcpy_toio(a,b,c)  memcpy((void __force *)(a),(b),(c))
 
 /*
  * Enforce In-order Execution of I/O:
@@ -135,26 +138,37 @@ static inline unsigned char __raw_readb(const volatile void __iomem *addr)
 {
 	return *(volatile unsigned char *)PCI_FIX_ADDR(addr);
 }
+#define __raw_readb __raw_readb
+
 static inline unsigned short __raw_readw(const volatile void __iomem *addr)
 {
 	return *(volatile unsigned short *)PCI_FIX_ADDR(addr);
 }
+#define __raw_readw __raw_readw
+
 static inline unsigned int __raw_readl(const volatile void __iomem *addr)
 {
 	return *(volatile unsigned int *)PCI_FIX_ADDR(addr);
 }
+#define __raw_readl __raw_readl
+
 static inline void __raw_writeb(unsigned char v, volatile void __iomem *addr)
 {
 	*(volatile unsigned char *)PCI_FIX_ADDR(addr) = v;
 }
+#define __raw_writeb __raw_writeb
+
 static inline void __raw_writew(unsigned short v, volatile void __iomem *addr)
 {
 	*(volatile unsigned short *)PCI_FIX_ADDR(addr) = v;
 }
+#define __raw_writew __raw_writew
+
 static inline void __raw_writel(unsigned int v, volatile void __iomem *addr)
 {
 	*(volatile unsigned int *)PCI_FIX_ADDR(addr) = v;
 }
+#define __raw_writel __raw_writel
 
 /*
  * 8, 16 and 32 bit, big and little endian I/O operations, with barrier.
@@ -303,20 +317,20 @@ static inline void out_be32(volatile unsigned __iomem *addr, u32 val)
 static inline void *phys_to_virt(phys_addr_t paddr)
 {
 #ifdef CONFIG_ADDR_MAP
-	return addrmap_phys_to_virt(paddr);
-#else
-	return (void *)((unsigned long)paddr);
+	if (gd->flags & GD_FLG_RELOC)
+		return addrmap_phys_to_virt(paddr);
 #endif
+	return (void *)((unsigned long)paddr);
 }
 #define phys_to_virt phys_to_virt
 
 static inline phys_addr_t virt_to_phys(void * vaddr)
 {
 #ifdef CONFIG_ADDR_MAP
-	return addrmap_virt_to_phys(vaddr);
-#else
-	return (phys_addr_t)((unsigned long)vaddr);
+	if (gd->flags & GD_FLG_RELOC)
+		return addrmap_virt_to_phys(vaddr);
 #endif
+	return (phys_addr_t)((unsigned long)vaddr);
 }
 #define virt_to_phys virt_to_phys
 

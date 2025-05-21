@@ -5,10 +5,13 @@
  * Copyright (C) 2019 Marek Vasut <marek.vasut@gmail.com>
  */
 
-#include <common.h>
 #include <cpu_func.h>
+#include <image.h>
+#include <init.h>
+#include <log.h>
 #include <asm/io.h>
 #include <spl.h>
+#include <linux/bitops.h>
 
 #define RCAR_CNTC_BASE	0xE6080000
 #define CNTCR_EN	BIT(0)
@@ -51,6 +54,6 @@ void s_init(void)
 {
 }
 
-void reset_cpu(ulong addr)
+void reset_cpu(void)
 {
 }

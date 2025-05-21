@@ -19,16 +19,18 @@
 #include <clk.h>
 #include <dm.h>
 #include <generic-phy.h>
+#include <log.h>
 #include <malloc.h>
 #include <phy-sun4i-usb.h>
 #include <reset.h>
 #include <asm/arch/cpu.h>
 #include <asm/arch/clock.h>
-#include <asm/arch/gpio.h>
-#include <asm-generic/gpio.h>
 #include <dm/device_compat.h>
 #include <dm/lists.h>
 #include <dm/root.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
+#include <linux/printk.h>
 #include <linux/usb/musb.h>
 #include "linux-compat.h"
 #include "musb_core.h"
@@ -79,8 +81,6 @@
 /******************************************************************************
  * From usbc/usbc.c
  ******************************************************************************/
-
-#define OFF_SUN6I_AHB_RESET0	0x2c0
 
 struct sunxi_musb_config {
 	struct musb_hdrc_config *config;
@@ -240,12 +240,6 @@ static int sunxi_musb_enable(struct musb *musb)
 	musb_writeb(musb->mregs, USBC_REG_o_VEND0, 0);
 
 	if (is_host_enabled(musb)) {
-		ret = sun4i_usb_phy_vbus_detect(&glue->phy);
-		if (ret == 1) {
-			printf("A charger is plugged into the OTG: ");
-			return -ENODEV;
-		}
-
 		ret = sun4i_usb_phy_id_detect(&glue->phy);
 		if (ret == 1) {
 			printf("No host cable detected: ");
@@ -254,7 +248,7 @@ static int sunxi_musb_enable(struct musb *musb)
 
 		ret = generic_phy_power_on(&glue->phy);
 		if (ret) {
-			pr_err("failed to power on USB PHY\n");
+			pr_debug("failed to power on USB PHY\n");
 			return ret;
 		}
 	}
@@ -278,7 +272,7 @@ static void sunxi_musb_disable(struct musb *musb)
 	if (is_host_enabled(musb)) {
 		ret = generic_phy_power_off(&glue->phy);
 		if (ret) {
-			pr_err("failed to power off USB PHY\n");
+			pr_debug("failed to power off USB PHY\n");
 			return;
 		}
 	}
@@ -298,21 +292,21 @@ static int sunxi_musb_init(struct musb *musb)
 
 	ret = clk_enable(&glue->clk);
 	if (ret) {
-		dev_err(dev, "failed to enable clock\n");
+		dev_err(musb->controller, "failed to enable clock\n");
 		return ret;
 	}
 
 	if (reset_valid(&glue->rst)) {
 		ret = reset_deassert(&glue->rst);
 		if (ret) {
-			dev_err(dev, "failed to deassert reset\n");
+			dev_err(musb->controller, "failed to deassert reset\n");
 			goto err_clk;
 		}
 	}
 
 	ret = generic_phy_init(&glue->phy);
 	if (ret) {
-		dev_err(dev, "failed to init USB PHY\n");
+		dev_dbg(musb->controller, "failed to init USB PHY\n");
 		goto err_rst;
 	}
 
@@ -349,7 +343,8 @@ static int sunxi_musb_exit(struct musb *musb)
 	if (generic_phy_valid(&glue->phy)) {
 		ret = generic_phy_exit(&glue->phy);
 		if (ret) {
-			dev_err(dev, "failed to power off usb phy\n");
+			dev_dbg(musb->controller,
+				"failed to power off usb phy\n");
 			return ret;
 		}
 	}
@@ -490,7 +485,7 @@ static int musb_usb_probe(struct udevice *dev)
 #else
 	pdata.mode = MUSB_PERIPHERAL;
 	host->host = musb_register(&pdata, &glue->dev, base);
-	if (!host->host)
+	if (IS_ERR_OR_NULL(host->host))
 		return -EIO;
 
 	printf("Allwinner mUSB OTG (Peripheral)\n");
@@ -548,6 +543,6 @@ U_BOOT_DRIVER(usb_musb) = {
 #ifdef CONFIG_USB_MUSB_HOST
 	.ops		= &musb_usb_ops,
 #endif
-	.platdata_auto_alloc_size = sizeof(struct usb_platdata),
-	.priv_auto_alloc_size = sizeof(struct sunxi_glue),
+	.plat_auto	= sizeof(struct usb_plat),
+	.priv_auto	= sizeof(struct sunxi_glue),
 };

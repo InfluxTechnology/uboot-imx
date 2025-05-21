@@ -7,7 +7,7 @@
 #ifndef _ASM_IO_H
 #define _ASM_IO_H
 
-#include <linux/compiler.h>
+#include <compiler.h>
 
 /*
  * This file contains the definitions for the x86 IO instructions
@@ -202,10 +202,16 @@ __OUT(l,,int)
 __INS(b)
 __INS(w)
 __INS(l)
+#define insb insb
+#define insw insw
+#define insl insl
 
 __OUTS(b)
 __OUTS(w)
 __OUTS(l)
+#define outsb outsb
+#define outsw outsw
+#define outsl outsl
 
 /* IO space accessors */
 #define clrio(type, addr, clear) \

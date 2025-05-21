@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
- *  Copyright (C) 2018 Texas Instruments Incorporated - http://www.ti.com
+ *  Copyright (C) 2018 Texas Instruments Incorporated - https://www.ti.com
  *
  *
  * This program is free software; you can redistribute it and/or modify
@@ -12,6 +12,7 @@
 #ifndef K3_NAVSS_UDMA_HWDEF_H_
 #define K3_NAVSS_UDMA_HWDEF_H_
 
+#include <linux/bitops.h>
 #define UDMA_PSIL_DST_THREAD_ID_OFFSET 0x8000
 
 /* Global registers */

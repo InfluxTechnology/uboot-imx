@@ -9,24 +9,26 @@
 #include <common.h>
 #include <clk-uclass.h>
 #include <dm.h>
+#include <log.h>
 #include <dm/device.h>
 #include <dm/device_compat.h>
 #include <dm/lists.h>
 #include <dt-bindings/phy/phy.h>
 #include <generic-phy.h>
 #include <asm/io.h>
-#include <asm/arch/sys_proto.h>
 #include <power-domain.h>
 #include <regmap.h>
 #include <syscon.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
 #include <linux/err.h>
 
 #define CMU_R07C		0x7c
 #define CMU_MASTER_CDN_O	BIT(24)
 
 #define COMLANE_R138		0xb38
-#define CONFIG_VERSION_REG_MASK	GENMASK(23, 16)
-#define CONFIG_VERSION_REG_SHIFT 16
+#define CFG_VERSION_REG_MASK	GENMASK(23, 16)
+#define CFG_VERSION_REG_SHIFT 16
 #define VERSION			0x70
 
 #define COMLANE_R190		0xb90
@@ -184,7 +186,7 @@ U_BOOT_DRIVER(serdes_am654_mux_clk) = {
 	.name = "ti-serdes-am654-mux-clk",
 	.id = UCLASS_CLK,
 	.probe = serdes_am654_mux_clk_probe,
-	.priv_auto_alloc_size = sizeof(struct serdes_am654_mux_clk_data),
+	.priv_auto	= sizeof(struct serdes_am654_mux_clk_data),
 	.ops = &serdes_am654_mux_clk_ops,
 };
 
@@ -283,8 +285,8 @@ static int serdes_am654_init(struct phy *x)
 	u32 mask;
 	u32 val;
 
-	mask = CONFIG_VERSION_REG_MASK;
-	val = VERSION << CONFIG_VERSION_REG_SHIFT;
+	mask = CFG_VERSION_REG_MASK;
+	val = VERSION << CFG_VERSION_REG_SHIFT;
 	regmap_update_bits(phy->regmap, COMLANE_R138, mask, val);
 
 	val = CMU_MASTER_CDN_O;
@@ -315,13 +317,13 @@ static int serdes_am654_of_xlate(struct phy *x,
 	struct serdes_am654 *phy = dev_get_priv(x->dev);
 
 	if (args->args_count != 2) {
-		dev_err(phy->dev, "Invalid DT PHY argument count: %d\n",
+		dev_err(x->dev, "Invalid DT PHY argument count: %d\n",
 			args->args_count);
 		return -EINVAL;
 	}
 
 	if (args->args[0] != PHY_TYPE_PCIE) {
-		dev_err(phy->dev, "Unrecognized PHY type: %d\n",
+		dev_err(x->dev, "Unrecognized PHY type: %d\n",
 			args->args[0]);
 		return -EINVAL;
 	}
@@ -341,7 +343,7 @@ static int serdes_am654_bind(struct udevice *dev)
 
 	ret = device_bind_driver_to_node(dev->parent,
 					 "ti-serdes-am654-mux-clk",
-					 dev_read_name(dev), dev->node,
+					 dev_read_name(dev), dev_ofnode(dev),
 					 NULL);
 	if (ret) {
 		dev_err(dev, "%s: not able to bind clock driver\n", __func__);
@@ -409,5 +411,5 @@ U_BOOT_DRIVER(am654_serdes_phy) = {
 	.bind = serdes_am654_bind,
 	.ops = &serdes_am654_phy_ops,
 	.probe = serdes_am654_probe,
-	.priv_auto_alloc_size = sizeof(struct serdes_am654),
+	.priv_auto	= sizeof(struct serdes_am654),
 };

@@ -6,20 +6,22 @@
 #include <common.h>
 #include <cpu_func.h>
 #include <init.h>
+#include <net.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/crm_regs.h>
 #include <asm/arch/imx-regs.h>
 #include <asm/arch/mx7-pins.h>
 #include <asm/arch/sys_proto.h>
+#include <asm/global_data.h>
 #include <asm/gpio.h>
 #include <asm/mach-imx/iomux-v3.h>
 #include <asm/io.h>
-#include <common.h>
 #include <dm.h>
 #include <dm/platform_data/serial_mxc.h>
 #include <fdt_support.h>
 #include <fsl_esdhc_imx.h>
 #include <jffs2/load_kernel.h>
+#include <linux/delay.h>
 #include <linux/sizes.h>
 #include <mmc.h>
 #include <miiphy.h>
@@ -50,12 +52,21 @@ DECLARE_GLOBAL_DATA_PTR;
 
 #define USB_CDET_GPIO	IMX_GPIO_NR(7, 14)
 
+#define FLASH_DETECTION_CTRL (PAD_CTL_HYS | PAD_CTL_PUE)
+#define FLASH_DET_GPIO IMX_GPIO_NR(6, 11)
+
+static bool is_emmc;
+
 int dram_init(void)
 {
 	gd->ram_size = get_ram_size((void *)PHYS_SDRAM, imx_ddr_size());
 
 	return 0;
 }
+
+static iomux_v3_cfg_t const flash_detection_pads[] = {
+	MX7D_PAD_SD3_RESET_B__GPIO6_IO11 | MUX_PAD_CTRL(FLASH_DETECTION_CTRL) | MUX_MODE_SION,
+};
 
 static iomux_v3_cfg_t const uart1_pads[] = {
 	MX7D_PAD_UART1_RX_DATA__UART1_DTE_TX | MUX_PAD_CTRL(UART_PAD_CTRL),
@@ -98,32 +109,7 @@ static void setup_gpmi_nand(void)
 }
 #endif
 
-#ifdef CONFIG_VIDEO_MXS
-static iomux_v3_cfg_t const lcd_pads[] = {
-	MX7D_PAD_LCD_CLK__LCD_CLK | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_ENABLE__LCD_ENABLE | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_HSYNC__LCD_HSYNC | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_VSYNC__LCD_VSYNC | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA00__LCD_DATA0 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA01__LCD_DATA1 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA02__LCD_DATA2 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA03__LCD_DATA3 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA04__LCD_DATA4 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA05__LCD_DATA5 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA06__LCD_DATA6 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA07__LCD_DATA7 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA08__LCD_DATA8 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA09__LCD_DATA9 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA10__LCD_DATA10 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA11__LCD_DATA11 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA12__LCD_DATA12 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA13__LCD_DATA13 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA14__LCD_DATA14 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA15__LCD_DATA15 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA16__LCD_DATA16 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-	MX7D_PAD_LCD_DATA17__LCD_DATA17 | MUX_PAD_CTRL(LCD_PAD_CTRL),
-};
-
+#ifdef CONFIG_VIDEO
 static iomux_v3_cfg_t const backlight_pads[] = {
 	/* Backlight On */
 	MX7D_PAD_SD1_WP__GPIO5_IO1 | MUX_PAD_CTRL(NO_PAD_CTRL),
@@ -137,8 +123,6 @@ static iomux_v3_cfg_t const backlight_pads[] = {
 
 static int setup_lcd(void)
 {
-	imx_iomux_v3_setup_multiple_pads(lcd_pads, ARRAY_SIZE(lcd_pads));
-
 	imx_iomux_v3_setup_multiple_pads(backlight_pads, ARRAY_SIZE(backlight_pads));
 
 	/* Set BL_ON */
@@ -158,8 +142,10 @@ static int setup_lcd(void)
  */
 void board_preboot_os(void)
 {
+#ifdef CONFIG_VIDEO
 	gpio_direction_output(GPIO_PWM_A, 1);
 	gpio_direction_output(GPIO_BL_ON, 0);
+#endif
 }
 
 static void setup_iomux_uart(void)
@@ -205,16 +191,22 @@ int board_init(void)
 	/* address of boot parameters */
 	gd->bd->bi_boot_params = PHYS_SDRAM + 0x100;
 
+	/*
+	 * Enable GPIO SION on NAND_WE_B/eMMC_RST with 100k pull-down. eMMC_RST
+	 * is pulled high with 4.7k for eMMC devices. This allows to reliably
+	 * detect eMMC vs NAND flash.
+	 */
+	imx_iomux_v3_setup_multiple_pads(flash_detection_pads, ARRAY_SIZE(flash_detection_pads));
+	gpio_request(FLASH_DET_GPIO, "flash-detection-gpio");
+	is_emmc = gpio_get_value(FLASH_DET_GPIO);
+	gpio_free(FLASH_DET_GPIO);
+
 #ifdef CONFIG_FEC_MXC
 	setup_fec();
 #endif
 
 #ifdef CONFIG_TARGET_COLIBRI_IMX7_NAND
 	setup_gpmi_nand();
-#endif
-
-#ifdef CONFIG_VIDEO_MXS
-	setup_lcd();
 #endif
 
 #ifdef CONFIG_USB_EHCI_MX7
@@ -233,7 +225,7 @@ int power_init_board(void)
 	int ret;
 
 
-	ret = pmic_get("rn5t567@33", &dev);
+	ret = pmic_get("pmic@33", &dev);
 	if (ret)
 		return ret;
 	ver = pmic_reg_read(dev, RN5T567_LSIVER);
@@ -263,11 +255,11 @@ int power_init_board(void)
 	return 0;
 }
 
-void reset_cpu(ulong addr)
+void reset_cpu(void)
 {
 	struct udevice *dev;
 
-	pmic_get("rn5t567@33", &dev);
+	pmic_get("pmic@33", &dev);
 
 	/* Use PMIC to reset, set REPWRTIM to 0 and REPWRON to 1 */
 	pmic_reg_write(dev, RN5T567_REPCNT, 0x1);
@@ -281,16 +273,8 @@ void reset_cpu(ulong addr)
 }
 #endif
 
-int checkboard(void)
-{
-	printf("Model: Toradex Colibri iMX7%c\n",
-	       is_cpu_type(MXC_CPU_MX7D) ? 'D' : 'S');
-
-	return 0;
-}
-
 #if defined(CONFIG_OF_LIBFDT) && defined(CONFIG_OF_BOARD_SETUP)
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 #if defined(CONFIG_IMX_BOOTAUX) && defined(CONFIG_ARCH_FIXUP_FDT_MEMORY)
 	int up;
@@ -329,55 +313,62 @@ int ft_board_setup(void *blob, bd_t *bd)
 			fdt_status_disabled(blob, off);
 	}
 #endif
-#if defined(CONFIG_FDT_FIXUP_PARTITIONS)
-	static const struct node_info nodes[] = {
-		{ "fsl,imx7d-gpmi-nand", MTD_DEV_TYPE_NAND, }, /* NAND flash */
-		{ "fsl,imx6q-gpmi-nand", MTD_DEV_TYPE_NAND, },
-	};
-
-	/* Update partition nodes using info from mtdparts env var */
-	puts("   Updating MTD partitions...\n");
-	fdt_fixup_mtdparts(blob, nodes, ARRAY_SIZE(nodes));
-#endif
 
 	return ft_common_board_setup(blob, bd);
 }
 #endif
 
 #ifdef CONFIG_USB_EHCI_MX7
-static iomux_v3_cfg_t const usb_otg2_pads[] = {
-	MX7D_PAD_UART3_CTS_B__USB_OTG2_PWR | MUX_PAD_CTRL(NO_PAD_CTRL),
-};
-
-int board_ehci_hcd_init(int port)
+int board_fix_fdt(void *rw_fdt_blob)
 {
-	switch (port) {
-	case 0:
-		break;
-	case 1:
-		if (is_cpu_type(MXC_CPU_MX7S))
-			return -ENODEV;
+	int ret;
 
-		imx_iomux_v3_setup_multiple_pads(usb_otg2_pads,
-						 ARRAY_SIZE(usb_otg2_pads));
-		break;
-	default:
-		return -EINVAL;
+	/* i.MX 7Solo has only one single USB OTG1 but no USB host port */
+	if (is_cpu_type(MXC_CPU_MX7S)) {
+		int offset = fdt_path_offset(rw_fdt_blob, "/soc/bus@30800000/usb@30b20000");
+
+		/*
+		 * We're changing from status = "okay" to status = "disabled".
+		 * In this case we'll need more space, so increase the size
+		 * a little bit.
+		 */
+		ret = fdt_increase_size(rw_fdt_blob, 32);
+		if (ret < 0) {
+			printf("Cannot increase FDT size: %d\n", ret);
+			return ret;
+		}
+
+		return fdt_status_disabled(rw_fdt_blob, offset);
 	}
+
 	return 0;
 }
 
-int board_usb_phy_mode(int port)
+#if defined(CONFIG_BOARD_LATE_INIT)
+int board_late_init(void)
 {
-	switch (port) {
-	case 0:
-		if (gpio_get_value(USB_CDET_GPIO))
-			return USB_INIT_DEVICE;
-		else
-			return USB_INIT_HOST;
-	case 1:
-	default:
-		return USB_INIT_HOST;
-	}
-}
+#if defined(CONFIG_VIDEO)
+	setup_lcd();
 #endif
+
+	if (IS_ENABLED(CONFIG_USB) && is_boot_from_usb()) {
+		env_set("bootdelay", "0");
+		if (IS_ENABLED(CONFIG_CMD_USB_SDP)) {
+			printf("Serial Downloader recovery mode, using sdp command\n");
+			env_set("bootcmd", "sdp 0");
+		} else if (IS_ENABLED(CONFIG_CMD_FASTBOOT)) {
+			printf("Fastboot recovery mode, using fastboot command\n");
+			env_set("bootcmd", "fastboot usb 0");
+		}
+	}
+
+	if (is_emmc)
+		env_set("variant", "-emmc");
+	else
+		env_set("variant", "");
+
+	return 0;
+}
+#endif /* CONFIG_BOARD_LATE_INIT */
+
+#endif /* CONFIG_USB_EHCI_MX7 */

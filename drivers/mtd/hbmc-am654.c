@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 //
-// Copyright (C) 2019 Texas Instruments Incorporated - http://www.ti.com/
+// Copyright (C) 2019 Texas Instruments Incorporated - https://www.ti.com/
 // Author: Vignesh Raghavendra <vigneshr@ti.com>
 
 #include <common.h>
@@ -102,5 +102,5 @@ U_BOOT_DRIVER(hbmc_am654) = {
 	.of_match = am654_hbmc_dt_ids,
 	.probe = am654_hbmc_probe,
 	.bind = am654_hbmc_bind,
-	.priv_auto_alloc_size = sizeof(struct am654_hbmc_priv),
+	.priv_auto	= sizeof(struct am654_hbmc_priv),
 };

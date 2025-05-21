@@ -19,7 +19,7 @@
 	};
 
 	aliases {
-		spi0 = &snfi;
+		spi0 = &snor;
 	};
 
 	memory@40000000 {
@@ -46,8 +46,39 @@
 	};
 };
 
+&pcie {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_pins>, <&pcie1_pins>;
+	status = "okay";
+
+	pcie@0,0 {
+		status = "okay";
+	};
+
+	pcie@1,0 {
+		status = "okay";
+	};
+};
 
 &pinctrl {
+	pcie0_pins: pcie0-pins {
+		mux {
+			function = "pcie";
+			groups = "pcie0_pad_perst",
+				 "pcie0_1_waken",
+				 "pcie0_1_clkreq";
+		};
+	};
+
+	pcie1_pins: pcie1-pins {
+		mux {
+			function = "pcie";
+			groups = "pcie1_pad_perst",
+				 "pcie1_0_waken",
+				 "pcie1_0_clkreq";
+		};
+	};
+
 	snfi_pins: snfi-pins {
 		mux {
 			function = "flash";
@@ -128,24 +159,44 @@
 		};
 
 	};
+
+	i2c1_pins_default: i2c1-default {
+		mux {
+			function = "i2c";
+			groups = "i2c1_0";
+		};
+	};
+
 };
 
 &snfi {
 	pinctrl-names = "default", "snfi";
 	pinctrl-0 = <&snor_pins>;
 	pinctrl-1 = <&snfi_pins>;
+	status = "disabled";
+
+	spi-flash@0{
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		bootph-all;
+	};
+};
+
+&snor {
+	pinctrl-names = "default";
+	pinctrl-0 = <&snor_pins>;
 	status = "okay";
 
 	spi-flash@0{
 		compatible = "jedec,spi-nor";
 		reg = <0>;
-		u-boot,dm-pre-reloc;
+		spi-tx-bus-width = <1>;
+		spi-rx-bus-width = <4>;
+		bootph-all;
 	};
 };
 
 &uart0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&uart0_pins>;
 	status = "okay";
 };
 
@@ -182,12 +233,30 @@
 &eth {
 	status = "okay";
 	mediatek,gmac-id = <0>;
-	phy-mode = "sgmii";
+	phy-mode = "2500base-x";
 	mediatek,switch = "mt7531";
 	reset-gpios = <&gpio 54 GPIO_ACTIVE_HIGH>;
 
 	fixed-link {
-		speed = <1000>;
+		speed = <2500>;
 		full-duplex;
 	};
+};
+
+&ssusb {
+	status = "okay";
+};
+
+&u3phy {
+       status = "okay";
+};
+
+&soft_i2c {
+	status = "disabled";
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins_default>;
+	status = "okay";
 };

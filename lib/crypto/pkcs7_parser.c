@@ -7,9 +7,11 @@
 
 #define pr_fmt(fmt) "PKCS7: "fmt
 #ifdef __UBOOT__
+#include <log.h>
 #include <dm/devres.h>
 #include <linux/bitops.h>
 #include <linux/compat.h>
+#include <linux/printk.h>
 #endif
 #include <linux/kernel.h>
 #ifndef __UBOOT__
@@ -20,7 +22,11 @@
 #include <linux/err.h>
 #include <linux/oid_registry.h>
 #include <crypto/public_key.h>
+#ifdef __UBOOT__
+#include <crypto/pkcs7_parser.h>
+#else
 #include "pkcs7_parser.h"
+#endif
 #include "pkcs7.asn1.h"
 
 MODULE_DESCRIPTION("PKCS#7 parser");

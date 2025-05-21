@@ -151,7 +151,6 @@
 		internal-regs {
 			serial@12000 {
 				status = "okay";
-				u-boot,dm-pre-reloc;
 			};
 			serial@12100 {
 				status = "okay";
@@ -177,6 +176,9 @@
 			};
 
 			mdio {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
 				phy0: ethernet-phy@0 {
 					reg = <0>;
 				};

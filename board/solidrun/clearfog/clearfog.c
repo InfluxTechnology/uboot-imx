@@ -4,12 +4,19 @@
  */
 
 #include <common.h>
+#include <env.h>
 #include <i2c.h>
+#include <init.h>
 #include <miiphy.h>
+#include <net.h>
 #include <netdev.h>
+#include <mmc.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/arch/cpu.h>
 #include <asm/arch/soc.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
 #include "../common/tlv_data.h"
 
 #include "../drivers/ddr/marvell/a38x/ddr3_init.h"
@@ -29,7 +36,7 @@ DECLARE_GLOBAL_DATA_PTR;
 #define BOARD_GPP_POL_LOW	0x0
 #define BOARD_GPP_POL_MID	0x0
 
-static struct tlv_data cf_tlv_data;
+static struct tlv_data cf_tlv_data = { 0 };
 
 static void cf_read_tlv_data(void)
 {
@@ -42,6 +49,7 @@ static void cf_read_tlv_data(void)
 	read_tlv_data(&cf_tlv_data);
 }
 
+/* The starting board_serdes_map reflects original Clearfog Pro usage */
 static struct serdes_map board_serdes_map[] = {
 	{SATA0, SERDES_SPEED_3_GBPS, SERDES_DEFAULT_MODE, 0, 0},
 	{SGMII1, SERDES_SPEED_1_25_GBPS, SERDES_DEFAULT_MODE, 0, 0},
@@ -51,20 +59,73 @@ static struct serdes_map board_serdes_map[] = {
 	{SGMII2, SERDES_SPEED_1_25_GBPS, SERDES_DEFAULT_MODE, 0, 0},
 };
 
+void config_cfbase_serdes_map(void)
+{
+	board_serdes_map[4].serdes_type = USB3_HOST0;
+	board_serdes_map[4].serdes_speed = SERDES_SPEED_5_GBPS;
+	board_serdes_map[4].serdes_mode = SERDES_DEFAULT_MODE;
+}
+
 int hws_board_topology_load(struct serdes_map **serdes_map_array, u8 *count)
 {
 	cf_read_tlv_data();
 
-	if (sr_product_is(&cf_tlv_data, "Clearfog GTR")) {
-		board_serdes_map[0].serdes_type = PEX0;
-		board_serdes_map[0].serdes_speed = SERDES_SPEED_5_GBPS;
-		board_serdes_map[0].serdes_mode = PEX_ROOT_COMPLEX_X1;
+	/* Apply build configuration options before runtime configuration */
+	if (IS_ENABLED(CONFIG_CLEARFOG_SFP_25GB))
+		board_serdes_map[5].serdes_speed = SERDES_SPEED_3_125_GBPS;
+
+	if (IS_ENABLED(CONFIG_CLEARFOG_CON2_SATA)) {
+		board_serdes_map[4].serdes_type = SATA2;
+		board_serdes_map[4].serdes_speed = SERDES_SPEED_3_GBPS;
+		board_serdes_map[4].serdes_mode = SERDES_DEFAULT_MODE;
+		board_serdes_map[4].swap_rx = 1;
 	}
 
-	if (sr_product_is(&cf_tlv_data, "Clearfog Base")) {
-		board_serdes_map[4].serdes_type = USB3_HOST0;
-		board_serdes_map[4].serdes_speed = SERDES_SPEED_5_GBPS;
-		board_serdes_map[4].serdes_mode = SERDES_DEFAULT_MODE;
+	if (IS_ENABLED(CONFIG_CLEARFOG_CON3_SATA)) {
+		board_serdes_map[2].serdes_type = SATA1;
+		board_serdes_map[2].serdes_speed = SERDES_SPEED_3_GBPS;
+		board_serdes_map[2].serdes_mode = SERDES_DEFAULT_MODE;
+		board_serdes_map[2].swap_rx = 1;
+	}
+
+	/* Apply runtime detection changes */
+	if (sr_product_is(&cf_tlv_data, "Clearfog GTR")) {
+		if (IS_ENABLED(CONFIG_CLEARFOG_GTR_SERDES0_SATA)) {
+			/* serdes 0 is sata (like clearfog pro) */
+		} else if (IS_ENABLED(CONFIG_CLEARFOG_GTR_SERDES0_PCIE)) {
+			/* serdes 0 is pci */
+			board_serdes_map[0].serdes_type = PEX0;
+			board_serdes_map[0].serdes_speed = SERDES_SPEED_5_GBPS;
+			board_serdes_map[0].serdes_mode = PEX_ROOT_COMPLEX_X1;
+		}
+		/* serdes 1 is 2.5Gbps fixed link to ethernet switch */
+		board_serdes_map[1].serdes_type = SGMII1;
+		board_serdes_map[1].serdes_speed = SERDES_SPEED_3_125_GBPS;
+		board_serdes_map[1].serdes_mode = SERDES_DEFAULT_MODE;
+		/* serdes 2 is pci (like clearfog pro) */
+		/* serdes 3 is usb-3 (like clearfog pro) */
+		/* serdes 4 is pci (like clearfog pro) */
+		/* serdes 5 is sfp connector (like clearfog pro) */
+	} else if (sr_product_is(&cf_tlv_data, "Clearfog Pro")) {
+		/* handle recognized product as noop, no adjustment required */
+	} else if (sr_product_is(&cf_tlv_data, "Clearfog Base")) {
+		config_cfbase_serdes_map();
+	} else {
+		/*
+		 * Fallback to static default. EEPROM TLV support is not
+		 * enabled, runtime detection failed, hardware support is not
+		 * present, EEPROM is corrupt, or an unrecognized product name
+		 * is present.
+		 */
+		if (IS_ENABLED(CONFIG_SPL_CMD_TLV_EEPROM))
+			puts("EEPROM TLV detection failed: ");
+		puts("Using static config for ");
+		if (IS_ENABLED(CONFIG_TARGET_CLEARFOG_BASE)) {
+			puts("Clearfog Base.\n");
+			config_cfbase_serdes_map();
+		} else {
+			puts("Clearfog Pro.\n");
+		}
 	}
 
 	*serdes_map_array = board_serdes_map;
@@ -95,10 +156,12 @@ static struct mv_ddr_topology_map board_topology_map = {
 	    MV_DDR_TIM_DEFAULT} },	/* timing */
 	BUS_MASK_32BIT,			/* Busses mask */
 	MV_DDR_CFG_DEFAULT,		/* ddr configuration data source */
+	NOT_COMBINED,			/* ddr twin-die combined */
 	{ {0} },			/* raw spd data */
 	{0},				/* timing parameters */
 	{ {0} },			/* electrical configuration */
 	{0,},				/* electrical parameters */
+	0,				/* ODT configuration */
 	0x3,				/* clock enable mask */
 };
 
@@ -109,12 +172,27 @@ struct mv_ddr_topology_map *mv_ddr_topology_map_get(void)
 	cf_read_tlv_data();
 
 	switch (cf_tlv_data.ram_size) {
+	case 2:
+		ifp->memory_size = MV_DDR_DIE_CAP_2GBIT;
+		break;
 	case 4:
 	default:
 		ifp->memory_size = MV_DDR_DIE_CAP_4GBIT;
 		break;
 	case 8:
 		ifp->memory_size = MV_DDR_DIE_CAP_8GBIT;
+		break;
+	}
+
+	switch (cf_tlv_data.ram_channels) {
+	default:
+	case 1:
+		for (uint8_t i = 0; i < 5; i++)
+			ifp->as_bus_params[i].cs_bitmask = 0x1;
+		break;
+	case 2:
+		for (uint8_t i = 0; i < 5; i++)
+			ifp->as_bus_params[i].cs_bitmask = 0x3;
 		break;
 	}
 
@@ -170,7 +248,9 @@ int board_init(void)
 
 int checkboard(void)
 {
-	char *board = "ClearFog";
+	char *board = "Clearfog Pro";
+	if (IS_ENABLED(CONFIG_TARGET_CLEARFOG_BASE))
+		board = "Clearfog Base";
 
 	cf_read_tlv_data();
 	if (strlen(cf_tlv_data.tlv_product_name[0]) > 0)
@@ -184,7 +264,7 @@ int checkboard(void)
 	return 0;
 }
 
-int board_eth_init(bd_t *bis)
+int board_eth_init(struct bd_info *bis)
 {
 	cpu_eth_init(bis); /* Built in controller(s) come first */
 	return pci_eth_init(bis);
@@ -192,6 +272,9 @@ int board_eth_init(bd_t *bis)
 
 int board_late_init(void)
 {
+	if (env_get("fdtfile"))
+		return 0;
+
 	cf_read_tlv_data();
 
 	if (sr_product_is(&cf_tlv_data, "Clearfog Base"))
@@ -200,6 +283,42 @@ int board_late_init(void)
 		env_set("fdtfile", "armada-385-clearfog-gtr-s4.dtb");
 	else if (sr_product_is(&cf_tlv_data, "Clearfog GTR L8"))
 		env_set("fdtfile", "armada-385-clearfog-gtr-l8.dtb");
+	else if (IS_ENABLED(CONFIG_TARGET_CLEARFOG_BASE))
+		env_set("fdtfile", "armada-388-clearfog-base.dtb");
+	else
+		env_set("fdtfile", "armada-388-clearfog-pro.dtb");
+
+	return 0;
+}
+
+static bool has_emmc(void)
+{
+	struct mmc *mmc;
+
+	mmc = find_mmc_device(0);
+	if (!mmc)
+		return 0;
+	return (!mmc_init(mmc) && IS_MMC(mmc)) ? true : false;
+}
+
+/*
+ * The Clearfog devices have only one SDHC device. This is either eMMC
+ * if it is populated on the SOM or SDHC if not. The Linux device tree
+ * assumes the SDHC case. Detect if the device is an eMMC and fixup the
+ * device-tree, so that it will be detected by Linux.
+ */
+int ft_board_setup(void *blob, struct bd_info *bd)
+{
+	int node;
+
+	if (has_emmc()) {
+		node = fdt_node_offset_by_compatible(blob, -1, "marvell,armada-380-sdhci");
+		if (node < 0)
+			return 0; /* Unexpected eMMC device; patching not supported */
+
+		puts("Patching FDT so that eMMC is detected by OS\n");
+		return fdt_setprop_empty(blob, node, "non-removable");
+	}
 
 	return 0;
 }

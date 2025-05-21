@@ -70,6 +70,7 @@
  */
 
 #ifndef __UBOOT__
+#include <log.h>
 #include <dm/devres.h>
 #include <linux/err.h>
 #include <linux/slab.h>
@@ -78,7 +79,9 @@
 #include <u-boot/crc.h>
 #else
 #include <div64.h>
+#include <linux/bug.h>
 #include <linux/err.h>
+#include <linux/printk.h>
 #endif
 
 #include <linux/math64.h>

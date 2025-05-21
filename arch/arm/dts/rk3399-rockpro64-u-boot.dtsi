@@ -6,12 +6,41 @@
 #include "rk3399-u-boot.dtsi"
 #include "rk3399-sdram-lpddr4-100.dtsi"
 / {
-	aliases {
-		spi0 = &spi1;
+	chosen {
+		u-boot,spl-boot-order = "same-as-spl", &spi_flash, &sdmmc, &sdhci;
 	};
 
-	chosen {
-		u-boot,spl-boot-order = "same-as-spl", &sdmmc, &sdhci;
+        smbios {
+                compatible = "u-boot,sysinfo-smbios";
+                smbios {
+                        system {
+                                manufacturer = "Pine64";
+                                product = "RockPro64";
+                        };
+
+                        baseboard {
+                                manufacturer = "Pine64";
+                                product = "RockPro64";
+                        };
+
+                        chassis {
+                                manufacturer = "Pine64";
+                                product = "RockPro64";
+                        };
+                };
+        };
+
+
+};
+
+&sdhci {
+	cap-mmc-highspeed;
+	mmc-ddr-1_8v;
+};
+
+&spi1 {
+	spi_flash: flash@0 {
+		bootph-all;
 	};
 };
 

@@ -9,12 +9,14 @@
 #ifndef _ATMEL_LCD_H_
 #define _ATMEL_LCD_H_
 
+#include <linux/types.h>
+
 /**
- * struct atmel_lcd_platdata - platform data for Atmel LCDs with driver model
+ * struct atmel_lcd_plat - platform data for Atmel LCDs with driver model
  *
  * @timing_index:	Index of LCD timing to use in device tree node
  */
-struct atmel_lcd_platdata {
+struct atmel_lcd_plat {
 	int timing_index;
 };
 

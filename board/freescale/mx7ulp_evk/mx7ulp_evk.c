@@ -5,6 +5,8 @@
 
 #include <common.h>
 #include <fdt_support.h>
+#include <init.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/arch/sys_proto.h>
 #include <asm/arch/mx7ulp-pins.h>
@@ -13,6 +15,7 @@
 #include <asm/gpio.h>
 #include <usb.h>
 #include <dm.h>
+#include <env.h>
 
 #ifdef CONFIG_BOOTLOADER_MENU
 #include "video.h"
@@ -33,6 +36,12 @@ int dram_init(void)
 	gd->ram_size = imx_ddr_size();
 
 	return 0;
+}
+
+ulong board_get_usable_ram_top(ulong total_size)
+{
+	/* Reserve top 1M memory used by M core vring/buffer */
+	return gd->ram_top - SZ_1M;
 }
 
 static iomux_cfg_t const lpuart4_pads[] = {
@@ -100,7 +109,7 @@ int board_init(void)
 }
 
 #if IS_ENABLED(CONFIG_OF_BOARD_SETUP)
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	const char *path;
 	int rc, nodeoff;
@@ -177,15 +186,6 @@ int board_late_init(void)
 	return 0;
 }
 
-#ifdef CONFIG_FSL_FASTBOOT
-#ifdef CONFIG_ANDROID_RECOVERY
-int is_recovery_key_pressing(void)
-{
-	return 0; /*TODO*/
-}
-#endif /*CONFIG_ANDROID_RECOVERY*/
-#endif /*CONFIG_FSL_FASTBOOT*/
-
 #ifdef CONFIG_ANDROID_SUPPORT
 bool is_power_key_pressed(void) {
 	/* the onoff button is 'pressed' by default on evk board */
@@ -249,6 +249,7 @@ int show_bootloader_menu(void) {
 						break;
 					case 2:
 						do_reset(NULL, 0, 0, NULL);
+						break;
 					case 3:
 						board_recovery_setup();
 						break;

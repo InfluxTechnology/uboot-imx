@@ -13,10 +13,14 @@
 #include <cpu_func.h>
 #include <net.h>
 #include <malloc.h>
+#include <wait_bit.h>
 #include <dm.h>
+#include <dm/device_compat.h>
 #include <clk.h>
 #include <power-domain.h>
 #include <asm/byteorder.h>
+#include <asm/cache.h>
+#include <linux/delay.h>
 #include <linux/errno.h>
 #include <asm/io.h>
 #include <asm/unaligned.h>
@@ -30,7 +34,6 @@
 #include <dm/pinctrl.h>
 #include <usb/ci_udc.h>
 #include <usb/ehci-ci.h>
-#include <usb/usb_mx6_common.h>
 #include "../host/ehci.h"
 #include "ci_udc.h"
 
@@ -107,7 +110,7 @@ static int ci_udc_gadget_start(struct usb_gadget *g,
 static int ci_udc_gadget_stop(struct usb_gadget *g);
 #endif
 
-static struct usb_gadget_ops ci_udc_ops = {
+static const struct usb_gadget_ops ci_udc_ops = {
 	.pullup = ci_pullup,
 #if CONFIG_IS_ENABLED(DM_USB_GADGET)
 	.udc_start		= ci_udc_gadget_start,
@@ -115,7 +118,7 @@ static struct usb_gadget_ops ci_udc_ops = {
 #endif
 };
 
-static struct usb_ep_ops ci_ep_ops = {
+static const struct usb_ep_ops ci_ep_ops = {
 	.enable         = ci_ep_enable,
 	.disable        = ci_ep_disable,
 	.queue          = ci_ep_queue,
@@ -339,7 +342,7 @@ static void ep_enable(int num, int in, int maxpacket)
 	if (num != 0) {
 		struct ept_queue_head *head = ci_get_qh(num, in);
 
-		head->config = CONFIG_MAX_PKT(maxpacket) | CONFIG_ZLT;
+		head->config = CFG_MAX_PKT(maxpacket) | CFG_ZLT;
 		ci_flush_qh(num);
 	}
 	writel(n, &udc->epctrl[num]);
@@ -371,12 +374,49 @@ static int ci_ep_enable(struct usb_ep *ep,
 	return 0;
 }
 
+static int ep_disable(int num, int in)
+{
+	struct ci_udc *udc = (struct ci_udc *)controller.ctrl->hcor;
+	unsigned int ep_bit, enable_bit;
+	int err;
+
+	if (in) {
+		ep_bit = EPT_TX(num);
+		enable_bit = CTRL_TXE;
+	} else {
+		ep_bit = EPT_RX(num);
+		enable_bit = CTRL_RXE;
+	}
+
+	/* clear primed buffers */
+	do {
+		writel(ep_bit, &udc->epflush);
+		err = wait_for_bit_le32(&udc->epflush, ep_bit, false, 1000, false);
+		if (err)
+			return err;
+	} while (readl(&udc->epstat) & ep_bit);
+
+	/* clear enable bit */
+	clrbits_le32(&udc->epctrl[num], enable_bit);
+
+	return 0;
+}
+
 static int ci_ep_disable(struct usb_ep *ep)
 {
 	struct ci_ep *ci_ep = container_of(ep, struct ci_ep, ep);
+	int num, in, err;
+
+	num = ci_ep->desc->bEndpointAddress & USB_ENDPOINT_NUMBER_MASK;
+	in = (ci_ep->desc->bEndpointAddress & USB_DIR_IN) != 0;
+
+	err = ep_disable(num, in);
+	if (err)
+		return err;
 
 	ci_ep->desc = NULL;
 	ep->desc = NULL;
+	ci_ep->req_primed = false;
 	return 0;
 }
 
@@ -419,6 +459,9 @@ align:
 
 flush:
 	hwaddr = (unsigned long)ci_req->hw_buf;
+	if (!hwaddr)
+		return 0;
+
 	aligned_used_len = roundup(req->length, ARCH_DMA_MINALIGN);
 	flush_dcache_range(hwaddr, hwaddr + aligned_used_len);
 
@@ -432,7 +475,7 @@ static void ci_debounce(struct ci_req *ci_req, int in)
 	unsigned long hwaddr = (unsigned long)ci_req->hw_buf;
 	uint32_t aligned_used_len;
 
-	if (in)
+	if (in || !hwaddr)
 		return;
 
 	aligned_used_len = roundup(req->actual, ARCH_DMA_MINALIGN);
@@ -885,8 +928,8 @@ void udc_irq(void)
 
 int ci_udc_handle_interrupts(void)
 {
-	u32 value;
 	struct ci_udc *udc = (struct ci_udc *)controller.ctrl->hcor;
+	u32 value;
 
 	value = readl(&udc->usbsts);
 	if (value)
@@ -973,11 +1016,11 @@ static int ci_udc_probe(void)
 		 */
 		head = controller.epts + i;
 		if (i < 2)
-			head->config = CONFIG_MAX_PKT(EP0_MAX_PACKET_SIZE)
-				| CONFIG_ZLT | CONFIG_IOS;
+			head->config = CFG_MAX_PKT(EP0_MAX_PACKET_SIZE)
+				| CFG_ZLT | CFG_IOS;
 		else
-			head->config = CONFIG_MAX_PKT(EP_MAX_PACKET_SIZE)
-				| CONFIG_ZLT;
+			head->config = CFG_MAX_PKT(EP_MAX_PACKET_SIZE)
+				| CFG_ZLT;
 		head->next = TERMINATE;
 		head->info = 0;
 
@@ -1034,20 +1077,19 @@ bool dfu_usb_get_reset(void)
 	return !!(readl(&udc->usbsts) & STS_URI);
 }
 
-static int ci_udc_otg_phy_mode2(ulong phy_addr)
+static int ci_udc_otg_phy_mode2(void *__iomem phy_base)
 {
 	void *__iomem phy_ctrl, *__iomem phy_status;
-	void *__iomem phy_base = (void *__iomem)phy_addr;
 	u32 val;
 
-	if (is_mx6() || is_mx7ulp() || is_imx8()) {
+	if (is_mx6() || is_mx7ulp() || is_imx8() || is_imx8ulp()) {
 		phy_ctrl = (void __iomem *)(phy_base + USBPHY_CTRL);
 		val = readl(phy_ctrl);
 		if (val & USBPHY_CTRL_OTG_ID)
 			return USB_INIT_DEVICE;
 		else
 			return USB_INIT_HOST;
-	} else if (is_mx7() || is_imx8mm() || is_imx8mn()) {
+	} else if (is_mx7() || is_imx8mm() || is_imx8mn() || is_imx9()) {
 		phy_status = (void __iomem *)(phy_base +
 					      USBNC_PHY_STATUS_OFFSET);
 		val = readl(phy_status);
@@ -1081,18 +1123,15 @@ bool udc_irq_reset(void)
 	return false;
 }
 
-bool ci_udc_check_bus_active(ulong ehci_addr, ulong phy_addr, int index)
+bool ci_udc_check_bus_active(ulong ehci_addr, struct ehci_mx6_phy_data *phy_data, int index)
 {
 	struct usb_ehci *ehci = (struct usb_ehci *)ehci_addr;
 	struct ehci_ctrl ctrl;
 	int ret;
 	bool active = false;
 
-	ret = ehci_mx6_common_init(ehci, index);
-	if (ret)
-		return false;
-
-	if (ci_udc_otg_phy_mode2(phy_addr) != USB_INIT_DEVICE)
+	ehci_mx6_phy_init(ehci, phy_data, index);
+	if (ci_udc_otg_phy_mode2(phy_data->phy_addr) != USB_INIT_DEVICE)
 		return false;
 
 	ctrl.hccr = (struct ehci_hccr *)((ulong)&ehci->caplength);
@@ -1128,7 +1167,7 @@ bool ci_udc_check_bus_active(ulong ehci_addr, ulong phy_addr, int index)
 
 
 #if !CONFIG_IS_ENABLED(DM_USB_GADGET)
-int usb_gadget_handle_interrupts(int index)
+int dm_usb_gadget_handle_interrupts(struct udevice *dev)
 {
 	return ci_udc_handle_interrupts();
 }
@@ -1218,6 +1257,7 @@ struct ci_udc_priv_data {
 	struct power_domain otg_pd;
 	struct clk phy_clk;
 	struct power_domain phy_pd;
+	struct ehci_mx6_phy_data phy_data;
 };
 
 static int ci_udc_gadget_handle_interrupts(struct udevice *dev)
@@ -1227,14 +1267,55 @@ static int ci_udc_gadget_handle_interrupts(struct udevice *dev)
 
 static int ci_udc_phy_setup(struct udevice *dev, struct ci_udc_priv_data *priv)
 {
+	void *__iomem addr;
+	int misc_off;
+
 	struct udevice __maybe_unused phy_dev;
 	priv->phy_off = fdtdec_lookup_phandle(gd->fdt_blob,
 					      dev_of_offset(dev),
 					      "fsl,usbphy");
-	if (priv->phy_off < 0)
+	if (priv->phy_off < 0) {
+		priv->phy_off = fdtdec_lookup_phandle(gd->fdt_blob,
+					      dev_of_offset(dev), "phys");
+		if (priv->phy_off < 0)
+			return -EINVAL;
+	}
+
+	addr = (void __iomem *)fdtdec_get_addr_size_auto_noparent(gd->fdt_blob,
+		priv->phy_off, "reg", 0, NULL, false);
+	if ((fdt_addr_t)addr == FDT_ADDR_T_NONE)
+		addr = NULL;
+
+	priv->phy_data.phy_addr = addr;
+
+	misc_off = fdtdec_lookup_phandle(gd->fdt_blob, dev_of_offset(dev), "fsl,usbmisc");
+	if (misc_off < 0)
 		return -EINVAL;
 
-	phy_dev.node = offset_to_ofnode(priv->phy_off);
+	addr = (void __iomem *)fdtdec_get_addr_size_auto_noparent(gd->fdt_blob,
+		misc_off, "reg", 0, NULL, false);
+	if ((fdt_addr_t)addr == FDT_ADDR_T_NONE)
+		return -EINVAL;
+
+	priv->phy_data.misc_addr = addr;
+
+#if defined(CONFIG_MX6)
+	int anatop_off;
+
+	/* Resolve ANATOP offset through USB PHY node */
+	anatop_off = fdtdec_lookup_phandle(gd->fdt_blob, priv->phy_off, "fsl,anatop");
+	if (anatop_off < 0)
+		return -EINVAL;
+
+	addr = (void __iomem *)fdtdec_get_addr_size_auto_noparent(gd->fdt_blob,
+		anatop_off, "reg", 0, NULL, false);
+	if ((fdt_addr_t)addr == FDT_ADDR_T_NONE)
+		return -EINVAL;
+
+	priv->phy_data.anatop_addr = addr;
+#endif
+
+	dev_set_ofnode(&phy_dev, offset_to_ofnode(priv->phy_off));
 
 #if CONFIG_IS_ENABLED(POWER_DOMAIN)
 	/* Need to power on the PHY before access it */
@@ -1272,17 +1353,15 @@ static int ci_udc_phy_shutdown(struct ci_udc_priv_data *priv)
 		ret = clk_disable(&priv->phy_clk);
 		if (ret)
 			return ret;
-
-		ret = clk_free(&priv->phy_clk);
-		if (ret)
-			return ret;
 	}
 #endif
 
 #if CONFIG_IS_ENABLED(POWER_DOMAIN)
-	ret = power_domain_off(&priv->phy_pd);
-	if (ret)
-		printf("Power down USB PHY failed! (error = %d)\n", ret);
+	if (priv->phy_pd.dev) {
+		ret = power_domain_off(&priv->phy_pd);
+		if (ret)
+			printf("Power down USB PHY failed! (error = %d)\n", ret);
+	}
 #endif
 	return ret;
 }
@@ -1290,6 +1369,7 @@ static int ci_udc_phy_shutdown(struct ci_udc_priv_data *priv)
 static int ci_udc_otg_clk_init(struct udevice *dev,
 			       struct clk_bulk *clks)
 {
+#if CONFIG_IS_ENABLED(CLK)
 	int ret;
 
 	ret = clk_get_bulk(dev, clks);
@@ -1299,12 +1379,13 @@ static int ci_udc_otg_clk_init(struct udevice *dev,
 	if (ret)
 		return ret;
 
-#if CONFIG_IS_ENABLED(CLK)
 	ret = clk_enable_bulk(clks);
 	if (ret) {
 		clk_release_bulk(clks);
 		return ret;
 	}
+#else
+	enable_usboh3_clk(1);
 #endif
 
 	return 0;
@@ -1318,10 +1399,10 @@ static int ci_udc_otg_phy_mode(struct udevice *dev)
 	void *__iomem phy_base = (void *__iomem)devfdt_get_addr(&priv->otgdev);
 	u32 val;
 
-	if (is_mx6() || is_mx7ulp() || is_imx8()) {
-		phy_base = (void __iomem *)fdtdec_get_addr(gd->fdt_blob,
+	if (is_mx6() || is_mx7ulp() || is_imx8() || is_imx8ulp()) {
+		phy_base = (void __iomem *)fdtdec_get_addr_size_auto_noparent(gd->fdt_blob,
 							   priv->phy_off,
-							   "reg");
+							   "reg", 0, NULL, false);
 		if ((fdt_addr_t)phy_base == FDT_ADDR_T_NONE)
 			return -EINVAL;
 
@@ -1331,7 +1412,7 @@ static int ci_udc_otg_phy_mode(struct udevice *dev)
 			return USB_INIT_DEVICE;
 		else
 			return USB_INIT_HOST;
-	} else if (is_mx7() || is_imx8mm() || is_imx8mn()) {
+	} else if (is_mx7() || is_imx8mm() || is_imx8mn() || is_imx9()) {
 		phy_status = (void __iomem *)(phy_base +
 					      USBNC_PHY_STATUS_OFFSET);
 		val = readl(phy_status);
@@ -1350,7 +1431,7 @@ static int ci_udc_otg_ofdata_to_platdata(struct udevice *dev)
 	int node = dev_of_offset(dev);
 	int usbotg_off;
 
-	if (usb_get_dr_mode(node) != USB_DR_MODE_PERIPHERAL) {
+	if (usb_get_dr_mode(dev_ofnode(dev)) != USB_DR_MODE_PERIPHERAL) {
 		dev_dbg(dev, "Invalid mode\n");
 		return -ENODEV;
 	}
@@ -1360,7 +1441,7 @@ static int ci_udc_otg_ofdata_to_platdata(struct udevice *dev)
 					   "chipidea,usb");
 	if (usbotg_off < 0)
 		return -EINVAL;
-	priv->otgdev.node = offset_to_ofnode(usbotg_off);
+	dev_set_ofnode(&priv->otgdev, offset_to_ofnode(usbotg_off));
 	priv->otgdev.parent = dev->parent;
 
 	return 0;
@@ -1374,16 +1455,18 @@ static int ci_udc_otg_probe(struct udevice *dev)
 
 	ehci = (struct usb_ehci *)devfdt_get_addr(&priv->otgdev);
 
-	pinctrl_select_state(&priv->otgdev, "default");
+	ret = pinctrl_select_state(&priv->otgdev, "default");
+	if (ret)
+		printf("Failed to configure default pinctrl\n");
 
 #if defined(CONFIG_MX6)
-	if (mx6_usb_fused((u32)ehci)) {
+	if (usb_fused((u32)ehci)) {
 		printf("USB@0x%x is fused, disable it\n", (u32)ehci);
 		return -ENODEV;
 	}
 #endif
 
-	ret = board_usb_init(dev->seq, USB_INIT_DEVICE);
+	ret = board_usb_init(dev_seq(dev), USB_INIT_DEVICE);
 	if (ret) {
 		printf("Failed to initialize board for USB\n");
 		return ret;
@@ -1404,9 +1487,7 @@ static int ci_udc_otg_probe(struct udevice *dev)
 	if (ret)
 		return ret;
 
-	ret = ehci_mx6_common_init(ehci, dev->seq);
-	if (ret)
-		return ret;
+	ehci_mx6_phy_init(ehci, &priv->phy_data, dev_seq(dev));
 
 	if (ci_udc_otg_phy_mode(dev) != USB_INIT_DEVICE)
 		return -ENODEV;
@@ -1433,15 +1514,19 @@ static int ci_udc_otg_remove(struct udevice *dev)
 
 	usb_del_gadget_udc(&controller.gadget);
 
+#if CONFIG_IS_ENABLED(CLK)
 	clk_release_bulk(&priv->clks);
+#endif
 	ci_udc_phy_shutdown(priv);
 #if CONFIG_IS_ENABLED(POWER_DOMAIN)
-	if (power_domain_off(&priv->otg_pd)) {
-		printf("Power down USB controller failed!\n");
-		return -EINVAL;
+	if (priv->otg_pd.dev) {
+		if (power_domain_off(&priv->otg_pd)) {
+			printf("Power down USB controller failed!\n");
+			return -EINVAL;
+		}
 	}
 #endif
-	board_usb_cleanup(dev->seq, USB_INIT_DEVICE);
+	board_usb_cleanup(dev_seq(dev), USB_INIT_DEVICE);
 
 	controller.ctrl = NULL;
 	return 0;
@@ -1456,11 +1541,11 @@ U_BOOT_DRIVER(ci_udc_otg) = {
 	.name	= "ci-udc-otg",
 	.id	= UCLASS_USB_GADGET_GENERIC,
 	.of_match = ci_udc_otg_ids,
-	.ofdata_to_platdata = ci_udc_otg_ofdata_to_platdata,
+	.of_to_plat = ci_udc_otg_ofdata_to_platdata,
 	.probe = ci_udc_otg_probe,
 	.remove = ci_udc_otg_remove,
 	.handle_interrupts = ci_udc_gadget_handle_interrupts,
-	.priv_auto_alloc_size = sizeof(struct ci_udc_priv_data),
+	.priv_auto = sizeof(struct ci_udc_priv_data),
 };
 
 #endif /* !CONFIG_IS_ENABLED(DM_USB_GADGET) */

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2019 Intel Corporation <www.intel.com>
+ * Copyright (C) 2019-2022 Intel Corporation <www.intel.com>
  *
  */
 #include <dm.h>
@@ -8,6 +8,7 @@
 #include <wait_bit.h>
 
 #include <asm/io.h>
+#include <linux/bitops.h>
 
 /* Directory */
 #define DIRUSFER		0x80010
@@ -80,8 +81,8 @@ static void ncore_ccu_init_dirs(void __iomem *base)
 				hang();
 			}
 
-			/* Enable snoop filter, a bit per snoop filter */
-			setbits_le32((ulong)CCU_DIR_REG_ADDR(base, DIRUSFER, i),
+			/* Disable snoop filter, a bit per snoop filter */
+			clrbits_le32((ulong)CCU_DIR_REG_ADDR(base, DIRUSFER, i),
 				     BIT(f));
 		}
 	}

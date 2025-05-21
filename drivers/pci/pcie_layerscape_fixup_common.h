@@ -9,12 +9,10 @@
 #ifndef _PCIE_LAYERSCAPE_FIXUP_COMMON_H_
 #define _PCIE_LAYERSCAPE_FIXUP_COMMON_H_
 
-#include <common.h>
-
-void ft_pci_setup_ls(void *blob, bd_t *bd);
+void ft_pci_setup_ls(void *blob, struct bd_info *bd);
 
 #ifdef CONFIG_PCIE_LAYERSCAPE_GEN4
-void ft_pci_setup_ls_gen4(void *blob, bd_t *bd);
+void ft_pci_setup_ls_gen4(void *blob, struct bd_info *bd);
 #endif /* CONFIG_PCIE_LAYERSCAPE_GEN4 */
 int pcie_next_streamid(int currentid, int id);
 int pcie_board_fix_fdt(void *fdt);

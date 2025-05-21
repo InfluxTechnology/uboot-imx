@@ -3,12 +3,14 @@
  * Copyright (c) 2019, Linaro Limited
  */
 
+#include <log.h>
 #include <malloc.h>
 #include <asm/io.h>
 #include <common.h>
 #include <dm.h>
 #include <dt-bindings/reset/ti-syscon.h>
 #include <reset-uclass.h>
+#include <linux/bitops.h>
 
 struct hisi_reset_priv {
 	void __iomem *base;
@@ -44,20 +46,21 @@ static int hisi_reset_assert(struct reset_ctl *rst)
 	return 0;
 }
 
-static int hisi_reset_free(struct reset_ctl *rst)
-{
-	return 0;
-}
-
-static int hisi_reset_request(struct reset_ctl *rst)
-{
-	return 0;
-}
-
 static int hisi_reset_of_xlate(struct reset_ctl *rst,
 			       struct ofnode_phandle_args *args)
 {
-	if (args->args_count != 3) {
+	unsigned long polarity;
+
+	switch (args->args_count) {
+	case 2:
+		polarity = ASSERT_SET;
+		break;
+
+	case 3:
+		polarity = args->args[2];
+		break;
+
+	default:
 		debug("Invalid args_count: %d\n", args->args_count);
 		return -EINVAL;
 	}
@@ -65,15 +68,13 @@ static int hisi_reset_of_xlate(struct reset_ctl *rst,
 	/* Use .data field as register offset and .id field as bit shift */
 	rst->data = args->args[0];
 	rst->id = args->args[1];
-	rst->polarity = args->args[2];
+	rst->polarity = polarity;
 
 	return 0;
 }
 
 static const struct reset_ops hisi_reset_reset_ops = {
 	.of_xlate = hisi_reset_of_xlate,
-	.request = hisi_reset_request,
-	.rfree = hisi_reset_free,
 	.rst_assert = hisi_reset_assert,
 	.rst_deassert = hisi_reset_deassert,
 };
@@ -100,5 +101,5 @@ U_BOOT_DRIVER(hisi_reset) = {
 	.of_match = hisi_reset_ids,
 	.ops = &hisi_reset_reset_ops,
 	.probe = hisi_reset_probe,
-	.priv_auto_alloc_size = sizeof(struct hisi_reset_priv),
+	.priv_auto	= sizeof(struct hisi_reset_priv),
 };

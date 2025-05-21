@@ -15,40 +15,50 @@
 		/delete-property/ serial1;
 		/delete-property/ serial2;
 	};
+
+	ethernet@08000000 {
+		compatible = "smsc,lan9221","smsc,lan9115";
+		reg = <0x08000000 0xff>;
+		bank-width = <2>;
+		vddvario-supply = <&vddvario>;
+		vdd33a-supply = <&vdd33a>;
+		reg-io-width = <4>;
+		smsc,save-mac-address;
+	};
 };
 
 &gpio1 {
-	/delete-property/ u-boot,dm-spl;
+	/delete-property/ bootph-pre-ram;
 };
 
 &gpio2 {
-	/delete-property/ u-boot,dm-spl;
+	/delete-property/ bootph-pre-ram;
 };
 
 &gpio3 {
-	/delete-property/ u-boot,dm-spl;
+	/delete-property/ bootph-pre-ram;
 };
 
 &gpio4 {
-	/delete-property/ u-boot,dm-spl;
+	/delete-property/ bootph-pre-ram;
 };
 
 &gpio5 {
-	/delete-property/ u-boot,dm-spl;
+	/delete-property/ bootph-pre-ram;
 };
 
 &gpio6 {
-	/delete-property/ u-boot,dm-spl;
+	/delete-property/ bootph-pre-ram;
 };
 
 &i2c1 {
 	clock-frequency = <400000>;
-	/delete-property/ u-boot,dm-spl;
+	/delete-property/ bootph-pre-ram;
 };
 
 &i2c2 {
 	clock-frequency = <400000>;
-	/delete-property/ u-boot,dm-spl;
+	/delete-property/ bootph-pre-ram;
 };
 
 /delete-node/ &bandgap;

@@ -8,75 +8,12 @@
 #include <clk.h>
 #include <clk-uclass.h>
 #include <dm.h>
+#include <log.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/imx-regs.h>
 #include <dt-bindings/clock/imxrt1050-clock.h>
 
 #include "clk.h"
-
-static ulong imxrt1050_clk_get_rate(struct clk *clk)
-{
-	struct clk *c;
-	int ret;
-
-	debug("%s(#%lu)\n", __func__, clk->id);
-
-	ret = clk_get_by_id(clk->id, &c);
-	if (ret)
-		return ret;
-
-	return clk_get_rate(c);
-}
-
-static ulong imxrt1050_clk_set_rate(struct clk *clk, ulong rate)
-{
-	struct clk *c;
-	int ret;
-
-	debug("%s(#%lu), rate: %lu\n", __func__, clk->id, rate);
-
-	ret = clk_get_by_id(clk->id, &c);
-	if (ret)
-		return ret;
-
-	return clk_set_rate(c, rate);
-}
-
-static int __imxrt1050_clk_enable(struct clk *clk, bool enable)
-{
-	struct clk *c;
-	int ret;
-
-	debug("%s(#%lu) en: %d\n", __func__, clk->id, enable);
-
-	ret = clk_get_by_id(clk->id, &c);
-	if (ret)
-		return ret;
-
-	if (enable)
-		ret = clk_enable(c);
-	else
-		ret = clk_disable(c);
-
-	return ret;
-}
-
-static int imxrt1050_clk_disable(struct clk *clk)
-{
-	return __imxrt1050_clk_enable(clk, 0);
-}
-
-static int imxrt1050_clk_enable(struct clk *clk)
-{
-	return __imxrt1050_clk_enable(clk, 1);
-}
-
-static struct clk_ops imxrt1050_clk_ops = {
-	.set_rate = imxrt1050_clk_set_rate,
-	.get_rate = imxrt1050_clk_get_rate,
-	.enable = imxrt1050_clk_enable,
-	.disable = imxrt1050_clk_disable,
-};
 
 static const char * const pll_ref_sels[] = {"osc", "dummy", };
 static const char * const pll1_bypass_sels[] = {"pll1_arm", "pll1_arm_ref_sel", };
@@ -90,14 +27,14 @@ static const char *const usdhc_sels[] = { "pll2_pfd2_396m", "pll2_pfd0_352m", };
 static const char *const lpuart_sels[] = { "pll3_80m", "osc", };
 static const char *const semc_alt_sels[] = { "pll2_pfd2_396m", "pll3_pfd1_664_62m", };
 static const char *const semc_sels[] = { "periph_sel", "semc_alt_sel", };
-static const char *const lcdif_sels[] = { "pll2_sys", "pll3_pfd3_454_74m", "pll5_video:", "pll2_pfd0_352m", "pll2_pfd1_594m", "pll3_pfd1_664_62m"};
+static const char *const lcdif_sels[] = { "pll2_sys", "pll3_pfd3_454_74m", "pll5_video", "pll2_pfd0_352m", "pll2_pfd1_594m", "pll3_pfd1_664_62m"};
 
 static int imxrt1050_clk_probe(struct udevice *dev)
 {
 	void *base;
 
 	/* Anatop clocks */
-	base = (void *)ANATOP_BASE_ADDR;
+	base = (void *)ofnode_get_addr(ofnode_by_compatible(ofnode_null(), "fsl,imxrt-anatop"));
 
 	clk_dm(IMXRT1050_CLK_PLL1_REF_SEL,
 	       imx_clk_mux("pll1_arm_ref_sel", base + 0x0, 14, 2,
@@ -235,12 +172,16 @@ static int imxrt1050_clk_probe(struct udevice *dev)
 	       imx_clk_gate2("lpuart1", "lpuart_podf", base + 0x7c, 24));
 	clk_dm(IMXRT1050_CLK_SEMC,
 	       imx_clk_gate2("semc", "semc_podf", base + 0x74, 4));
-	clk_dm(IMXRT1050_CLK_LCDIF,
+	clk_dm(IMXRT1050_CLK_LCDIF_APB,
 	       imx_clk_gate2("lcdif", "lcdif_podf", base + 0x70, 28));
+	clk_dm(IMXRT1050_CLK_LCDIF_PIX,
+	       imx_clk_gate2("lcdif_pix", "lcdif", base + 0x74, 10));
+	clk_dm(IMXRT1050_CLK_USBOH3,
+	       imx_clk_gate2("usboh3", "pll3_usb_otg", base + 0x80, 0));
 
-#ifdef CONFIG_SPL_BUILD
 	struct clk *clk, *clk1;
 
+#ifdef CONFIG_SPL_BUILD
 	/* bypass pll1 before setting its rate */
 	clk_get_by_id(IMXRT1050_CLK_PLL1_REF_SEL, &clk);
 	clk_get_by_id(IMXRT1050_CLK_PLL1_BYPASS, &clk1);
@@ -271,7 +212,14 @@ static int imxrt1050_clk_probe(struct udevice *dev)
 
 	clk_get_by_id(IMXRT1050_CLK_PLL3_BYPASS, &clk1);
 	clk_set_parent(clk1, clk);
+#else
+	/* Set PLL5 for LCDIF to its default 650Mhz */
+	clk_get_by_id(IMXRT1050_CLK_PLL5_VIDEO, &clk);
+	clk_enable(clk);
+	clk_set_rate(clk, 650000000UL);
 
+	clk_get_by_id(IMXRT1050_CLK_PLL5_BYPASS, &clk1);
+	clk_set_parent(clk1, clk);
 #endif
 
 	return 0;
@@ -286,7 +234,7 @@ U_BOOT_DRIVER(imxrt1050_clk) = {
 	.name = "clk_imxrt1050",
 	.id = UCLASS_CLK,
 	.of_match = imxrt1050_clk_ids,
-	.ops = &imxrt1050_clk_ops,
+	.ops = &ccf_clk_ops,
 	.probe = imxrt1050_clk_probe,
 	.flags = DM_FLAG_PRE_RELOC,
 };

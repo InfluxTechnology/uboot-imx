@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
  * (C) Copyright 2015
- * Texas Instruments Incorporated - http://www.ti.com/
+ * Texas Instruments Incorporated - https://www.ti.com/
  */
 #include <common.h>
 #include <dm.h>
@@ -10,7 +10,9 @@
 #include <remoteproc.h>
 #include <asm/io.h>
 #include <dm/test.h>
+#include <test/test.h>
 #include <test/ut.h>
+
 /**
  * dm_test_remoteproc_base() - test the operations after initializations
  * @uts:	unit test state
@@ -66,7 +68,7 @@ static int dm_test_remoteproc_base(struct unit_test_state *uts)
 
 	return 0;
 }
-DM_TEST(dm_test_remoteproc_base, DM_TESTF_SCAN_PDATA | DM_TESTF_SCAN_FDT);
+DM_TEST(dm_test_remoteproc_base, UT_TESTF_SCAN_PDATA | UT_TESTF_SCAN_FDT);
 
 #define DEVICE_TO_PHYSICAL_OFFSET	0x1000
 /**
@@ -137,7 +139,7 @@ static int dm_test_remoteproc_elf(struct unit_test_state *uts)
 		0x20, 0x00, 0x00, 0x00,
 		/* memsz = filesz */
 		0x20, 0x00, 0x00, 0x00,
-		/* flags : readable and exectuable */
+		/* flags : readable and executable */
 		0x05, 0x00, 0x00, 0x00,
 		/* padding */
 		0x00, 0x00, 0x00, 0x00,
@@ -206,7 +208,7 @@ static int dm_test_remoteproc_elf(struct unit_test_state *uts)
 	 * at SDRAM_BASE *device* address (p_paddr field).
 	 * Its size is defined by the p_filesz field.
 	 */
-	phdr->p_paddr = CONFIG_SYS_SDRAM_BASE;
+	phdr->p_paddr = CFG_SYS_SDRAM_BASE;
 	loaded_firmware_size = phdr->p_filesz;
 
 	/*
@@ -223,13 +225,13 @@ static int dm_test_remoteproc_elf(struct unit_test_state *uts)
 
 	/* Load firmware in loaded_firmware, and verify it */
 	ut_assertok(rproc_elf32_load_image(dev, (ulong)valid_elf32, size));
-	ut_assertok(memcmp(loaded_firmware, valid_elf32, loaded_firmware_size));
+	ut_asserteq_mem(loaded_firmware, valid_elf32, loaded_firmware_size);
 	ut_asserteq(rproc_elf_get_boot_addr(dev, (unsigned long)valid_elf32),
 		    0x08000000);
 	unmap_physmem(loaded_firmware, MAP_NOCACHE);
 
 	/* Resource table */
-	shdr->sh_addr = CONFIG_SYS_SDRAM_BASE;
+	shdr->sh_addr = CFG_SYS_SDRAM_BASE;
 	rsc_table_size = shdr->sh_size;
 
 	loaded_rsc_table_paddr = shdr->sh_addr + DEVICE_TO_PHYSICAL_OFFSET;
@@ -241,10 +243,10 @@ static int dm_test_remoteproc_elf(struct unit_test_state *uts)
 	/* Load and verify */
 	ut_assertok(rproc_elf32_load_rsc_table(dev, (ulong)valid_elf32, size,
 					       &rsc_addr, &rsc_size));
-	ut_asserteq(rsc_addr, CONFIG_SYS_SDRAM_BASE);
+	ut_asserteq(rsc_addr, CFG_SYS_SDRAM_BASE);
 	ut_asserteq(rsc_size, rsc_table_size);
-	ut_assertok(memcmp(loaded_firmware, valid_elf32 + shdr->sh_offset,
-			   shdr->sh_size));
+	ut_asserteq_mem(loaded_firmware, valid_elf32 + shdr->sh_offset,
+			shdr->sh_size);
 	unmap_physmem(loaded_firmware, MAP_NOCACHE);
 
 	/* Invalid ELF Magic */
@@ -254,4 +256,4 @@ static int dm_test_remoteproc_elf(struct unit_test_state *uts)
 
 	return 0;
 }
-DM_TEST(dm_test_remoteproc_elf, DM_TESTF_SCAN_PDATA | DM_TESTF_SCAN_FDT);
+DM_TEST(dm_test_remoteproc_elf, UT_TESTF_SCAN_PDATA | UT_TESTF_SCAN_FDT);

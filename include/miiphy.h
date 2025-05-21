@@ -14,7 +14,6 @@
 #ifndef _miiphy_h_
 #define _miiphy_h_
 
-#include <common.h>
 #include <linux/mii.h>
 #include <linux/list.h>
 #include <net.h>
@@ -81,7 +80,15 @@ struct bb_miiphy_bus {
 extern struct bb_miiphy_bus bb_miiphy_buses[];
 extern int bb_miiphy_buses_num;
 
-void bb_miiphy_init(void);
+/**
+ * bb_miiphy_init() - Initialize bit-banged MII bus driver
+ *
+ * It is called during the generic post-relocation init sequence.
+ *
+ * Return: 0 if OK
+ */
+int bb_miiphy_init(void);
+
 int bb_miiphy_read(struct mii_dev *miidev, int addr, int devad, int reg);
 int bb_miiphy_write(struct mii_dev *miidev, int addr, int devad, int reg,
 		    u16 value);
@@ -118,8 +125,6 @@ int bb_miiphy_write(struct mii_dev *miidev, int addr, int devad, int reg,
 #define ESTATUS_1000XF		0x8000
 #define ESTATUS_1000XH		0x4000
 
-#ifdef CONFIG_DM_MDIO
-
 /**
  * struct mdio_perdev_priv - Per-device class data for MDIO DM
  *
@@ -152,6 +157,46 @@ struct mdio_ops {
 void dm_mdio_probe_devices(void);
 
 /**
+ * dm_mdio_read - Wrapper over .read() operation for DM MDIO
+ *
+ * @mdiodev: mdio device
+ * @addr: PHY address on MDIO bus
+ * @devad: device address on PHY if C45; should be MDIO_DEVAD_NONE if C22
+ * @reg: register address
+ * Return: register value if non-negative, -error code otherwise
+ */
+int dm_mdio_read(struct udevice *mdio_dev, int addr, int devad, int reg);
+
+/**
+ * dm_mdio_write - Wrapper over .write() operation for DM MDIO
+ *
+ * @mdiodev: mdio device
+ * @addr: PHY address on MDIO bus
+ * @devad: device address on PHY if C45; should be MDIO_DEVAD_NONE if C22
+ * @reg: register address
+ * @val: value to write
+ * Return: 0 on success, -error code otherwise
+ */
+int dm_mdio_write(struct udevice *mdio_dev, int addr, int devad, int reg, u16 val);
+
+/**
+ * dm_mdio_reset - Wrapper over .reset() operation for DM MDIO
+ *
+ * @mdiodev: mdio device
+ * Return: 0 on success, -error code otherwise
+ */
+int dm_mdio_reset(struct udevice *mdio_dev);
+
+/**
+ * dm_phy_find_by_ofnode - Find PHY device by ofnode
+ *
+ * @phynode: PHY's ofnode
+ *
+ * Return: pointer to phy_device, or NULL on error
+ */
+struct phy_device *dm_phy_find_by_ofnode(ofnode phynode);
+
+/**
  * dm_mdio_phy_connect - Wrapper over phy_connect for DM MDIO
  *
  * @mdiodev: mdio device the PHY is accesible on
@@ -159,7 +204,7 @@ void dm_mdio_probe_devices(void);
  * @ethdev: ethernet device to connect to the PHY
  * @interface: MAC-PHY protocol
  *
- * @return pointer to phy_device, or 0 on error
+ * Return: pointer to phy_device, or 0 on error
  */
 struct phy_device *dm_mdio_phy_connect(struct udevice *mdiodev, int phyaddr,
 				       struct udevice *ethdev,
@@ -173,13 +218,22 @@ struct phy_device *dm_mdio_phy_connect(struct udevice *mdiodev, int phyaddr,
  *
  * @ethdev: ethernet device
  *
- * @return pointer to phy_device, or 0 on error
+ * Return: pointer to phy_device, or 0 on error
  */
 struct phy_device *dm_eth_phy_connect(struct udevice *ethdev);
 
-#endif
-
-#ifdef CONFIG_DM_MDIO_MUX
+/**
+ * dm_eth_phy_connect_index - Connect an Eth device to the #phy_index PHY based on device tree
+ * This means that the phy-handle reference can now hold multiple PHYs.
+ *
+ * Picks up the DT phy-handle and phy-mode from ethernet device node and
+ * connects the ethernet device to the linked PHY.
+ *
+ * @ethdev: ethernet device
+ *
+ * @return pointer to phy_device, or 0 on error
+ */
+struct phy_device *dm_eth_phy_connect_index(struct udevice *ethdev, int phy_index);
 
 /* indicates none of the child buses is selected */
 #define MDIO_MUX_SELECT_NONE	-1
@@ -196,7 +250,5 @@ struct mdio_mux_ops {
 };
 
 #define mdio_mux_get_ops(dev) ((struct mdio_mux_ops *)(dev)->driver->ops)
-
-#endif
 
 #endif

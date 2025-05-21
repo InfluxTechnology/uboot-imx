@@ -45,10 +45,17 @@
 
 #ifdef CONFIG_IMX_TRUSTY_OS
 #include "u-boot/sha256.h"
+#include "trusty/rpmb.h"
 #include <trusty/libtipc.h>
 #endif
 
+#ifdef CONFIG_IMX_SNPS_DDR_PHY_QB_GEN
+#include <asm/arch/ddr.h>
+#include <u-boot/crc.h>
+#endif
+
 #include "fb_fsl_common.h"
+#include "fb_fsl_virtual_ab.h"
 
 #define EP_BUFFER_SIZE			4096
 
@@ -184,10 +191,24 @@ static void reboot_bootloader(char *cmd_parameter, char *response)
 {
 	enable_fastboot_command();
 
-	if (fastboot_set_reboot_flag())
+	if (fastboot_set_reboot_flag(FASTBOOT_REBOOT_REASON_BOOTLOADER))
 		fastboot_fail("Cannot set reboot flag", response);
 	else
 		fastboot_okay(NULL, response);
+}
+
+bool endswith(char* s, char* subs) {
+	if (!s || !subs)
+		return false;
+	uint32_t len = strlen(s);
+	uint32_t sublen = strlen(subs);
+	if (len < sublen) {
+		return false;
+	}
+	if (strncmp(s + len - sublen, subs, sublen)) {
+		return false;
+	}
+        return true;
 }
 
 #ifdef CONFIG_ANDROID_RECOVERY
@@ -201,30 +222,57 @@ static void reboot_fastboot(char *cmd_parameter, char *response)
 {
 	enable_recovery_fastboot();
 
-	if (fastboot_set_reboot_flag())
+	if (fastboot_set_reboot_flag(FASTBOOT_REBOOT_REASON_FASTBOOTD))
 		fastboot_fail("Cannot set reboot flag", response);
 	else
 		fastboot_okay(NULL, response);
 }
 #endif
 
-static void upload(char *cmd_parameter, char *response)
+static void send(char *response, const char *buffer, unsigned int buffer_size)
 {
-	if (!fastboot_bytes_received || fastboot_bytes_received > (EP_BUFFER_SIZE * 32)) {
-		fastboot_fail("", response);
-		return;
-	}
+	int remaining, size;
+	unsigned int sent = 0;
 
-	printf("Will upload %d bytes.\n", fastboot_bytes_received);
-	snprintf(response, FASTBOOT_RESPONSE_LEN, "DATA%08x", fastboot_bytes_received);
+	printf("Will upload %d bytes.\n", buffer_size);
+	snprintf(response, FASTBOOT_RESPONSE_LEN, "DATA%08x", buffer_size);
 	fastboot_tx_write_more(response);
 
-	fastboot_tx_write((const char *)(fastboot_buf_addr), fastboot_bytes_received);
+	while (sent != buffer_size) {
+		remaining = buffer_size - sent;
+		size = EP_BUFFER_SIZE < remaining ? EP_BUFFER_SIZE : remaining;
+		fastboot_tx_write_more_s(buffer + sent, size);
+		sent += size;
+	}
 
 	snprintf(response,FASTBOOT_RESPONSE_LEN, "OKAY");
 	fastboot_tx_write_more(response);
 
 	fastboot_none_resp(response);
+}
+
+static void upload(char *cmd_parameter, char *response)
+{
+	#if CONFIG_IS_ENABLED(IMX_SNPS_DDR_PHY_QB_GEN)
+	if (endswith(cmd_parameter, "snps-ddr-phy-qb")) {
+		struct ddrphy_qb_state *qb_state;
+	#if CONFIG_IS_ENABLED(IMX93)
+		uint32_t crc;
+	#endif
+		qb_state = (struct ddrphy_qb_state *)CONFIG_SAVED_QB_STATE_BASE;
+	#if CONFIG_IS_ENABLED(IMX93)
+		crc = crc32(0, (void *)&(qb_state->flags), DDRPHY_QB_STATE_SIZE);
+
+		if (crc != qb_state->crc)
+			log_err("DDRPHY TD CRC error SPL->U-Boot: spl=0x%08x, uboot=0x%08x\n",
+				qb_state->crc, crc);
+	#endif
+		send(response, (const char *)qb_state, sizeof(struct ddrphy_qb_state));
+		return;
+	}
+	#endif
+
+	send(response, (const char *)(fastboot_buf_addr), fastboot_bytes_received);
 }
 
 /**
@@ -346,7 +394,7 @@ static int partition_table_valid(void)
 	if (!tos_flashed)
 		return 0;
 #endif
-	disk_partition_t info;
+	struct disk_partition info;
 	mmc_no = fastboot_devinfo.dev_id;
 	dev_desc = blk_get_dev("mmc", mmc_no);
 	if (dev_desc)
@@ -380,6 +428,7 @@ static void wipe_all_userdata(void)
 	rbkidx_erase();
 	printf("Wipe stored_rollback_index completed.\n");
 #endif
+	process_erase_mmc(FASTBOOT_PARTITION_METADATA, response);
 	printf("Wipe userdata completed.\n");
 }
 
@@ -402,13 +451,22 @@ static FbLockState do_fastboot_unlock(bool force)
 			char *serial = get_serial();
 			status = trusty_verify_secure_unlock(fastboot_buf_addr,
 								fastboot_bytes_received,
-								serial, 16);
+								(uint8_t *)serial, 16);
 			if (status < 0) {
 				printf("verify secure unlock credential fail due Trusty return %d\n", status);
 				return FASTBOOT_LOCK_ERROR;
 			}
 		}
 #endif
+
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+		if (virtual_ab_update_is_merging() ||
+			(virtual_ab_update_is_snapshoted() && !virtual_ab_slot_match())) {
+			printf("Can not erase userdata while a snapshot update is in progress!\n");
+			return FASTBOOT_LOCK_ERROR;
+		}
+#endif
+
 		wipe_all_userdata();
 		status = fastboot_set_lock_stat(FASTBOOT_UNLOCK);
 		if (status < 0)
@@ -430,6 +488,14 @@ static FbLockState do_fastboot_lock(void)
 		return FASTBOOT_LOCK;
 	}
 
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+		if (virtual_ab_update_is_merging() ||
+			(virtual_ab_update_is_snapshoted() && !virtual_ab_slot_match())) {
+			printf("Can not erase userdata while a snapshot update is in progress!\n");
+			return FASTBOOT_LOCK_ERROR;
+		}
+#endif
+
 	wipe_all_userdata();
 	status = fastboot_set_lock_stat(FASTBOOT_LOCK);
 	if (status < 0)
@@ -438,18 +504,14 @@ static FbLockState do_fastboot_lock(void)
 	return FASTBOOT_LOCK;
 }
 
-static bool endswith(char* s, char* subs) {
-	if (!s || !subs)
+static bool erase_uboot_env(void) {
+	FbLockState status;
+	status = fastboot_get_lock_stat();
+	if (status == FASTBOOT_LOCK) {
+		printf("can not erase env when device is in locked state\n");
 		return false;
-	uint32_t len = strlen(s);
-	uint32_t sublen = strlen(subs);
-	if (len < sublen) {
-		return false;
-	}
-	if (strncmp(s + len - sublen, subs, sublen)) {
-		return false;
-	}
-	return true;
+	} else
+		return env_erase() ? false : true;
 }
 
 static void flashing(char *cmd, char *response)
@@ -624,7 +686,9 @@ static void flashing(char *cmd, char *response)
 			printf("Append ec attestation key successfully!\n");
 			strcpy(response, "OKAY");
 		}
-	}  else if (endswith(cmd, FASTBOOT_GET_MPPUBK)) {
+	}
+#ifdef CONFIG_GENERATE_MPPUBK
+	else if (endswith(cmd, FASTBOOT_GET_MPPUBK)) {
 		if (fastboot_get_mppubk(fastboot_buf_addr, &fastboot_bytes_received)) {
 			printf("ERROR Generate mppubk failed!\n");
 			strcpy(response, "FAILGenerate mppubk failed!");
@@ -632,7 +696,9 @@ static void flashing(char *cmd, char *response)
 			printf("mppubk generated!\n");
 			strcpy(response, "OKAY");
 		}
-	}  else if (endswith(cmd, FASTBOOT_GET_SERIAL_NUMBER)) {
+	}
+#endif
+	else if (endswith(cmd, FASTBOOT_GET_SERIAL_NUMBER)) {
 		char *serial = get_serial();
 
 		if (!serial)
@@ -644,20 +710,134 @@ static void flashing(char *cmd, char *response)
 			printf("Serial number generated!\n");
 			strcpy(response, "OKAY");
 		}
+	} else if (endswith(cmd, FASTBOOT_WV_PROVISION)) {
+		if (hwcrypto_provision_wv_key(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR provision widevine keybox failed!\n");
+			strcpy(response, "FAILInternal error!");
+		} else {
+			printf("Provision widevine keybox successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, FASTBOOT_WV_PROVISION_ENC)) {
+		if (hwcrypto_provision_wv_key_enc(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR provision widevine keybox failed!\n");
+			strcpy(response, "FAILInternal error!");
+		} else {
+			printf("Provision widevine keybox successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, FASTBOOT_FIRMWARE_SIGN_KEY)) {
+		if (hwcrypto_provision_firmware_sign_key(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR provision firmware sign key failed!\n");
+			strcpy(response, "FAILInternal error!");
+		} else {
+			printf("Provision firmware sign key successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, FASTBOOT_FIRMWARE_ENCRYPT_KEY)) {
+		if (hwcrypto_provision_firmware_encrypt_key(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR provision firmware encrypt key failed!\n");
+			strcpy(response, "FAILInternal error!");
+		} else {
+			printf("Provision firmware encrypt key successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, FASTBOOT_SRM_PROVISION)) {
+		if (hwcrypto_provision_srm(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR provision srm failed!\n");
+			strcpy(response, "FAILInternal error!");
+		} else {
+			printf("Provision srm successfully!\n");
+			strcpy(response, "OKAY");
+		}
 	}
+#ifdef CONFIG_IMX8M
+	else if (endswith(cmd, FASTBOOT_GENERATE_DEK_BLOB)) {
+		if (hwcrypto_gen_dek_blob(fastboot_buf_addr, &fastboot_bytes_received)) {
+			printf("ERROR generate dek_blob failed!\n");
+			strcpy(response, "FAILgenerate dek_blob failed!");
+		} else {
+			printf("Generate dek_blob successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	}
+#endif
+#if defined(CONFIG_AHAB_BOOT) && defined(CONFIG_CMD_DEKBLOB)
+        else if (endswith(cmd, FASTBOOT_GENERATE_DEK_BLOB)) {
+		if (generate_dek_blob(fastboot_buf_addr, &fastboot_bytes_received)) {
+			printf("ERROR generate dek_blob failed!\n");
+			strcpy(response, "FAILgenerate dek_blob failed!");
+		} else {
+			printf("Generate dek_blob successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	}
+#endif
+	else if (endswith(cmd, FASTBOOT_PROVISION_SPL_DEK_BLOB)) {
+		if (hwcrypto_provision_dek_blob(fastboot_buf_addr, &fastboot_bytes_received, SPL_DEK_BLOB)) {
+			printf("ERROR provision spl_dek_blob failed!\n");
+			strcpy(response, "FAILprovision spl_dek_blob failed!");
+		} else {
+			printf("Provision spl_dek_blob successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, FASTBOOT_PROVISION_BOOTLOADER_DEK_BLOB)) {
+		if (hwcrypto_provision_dek_blob(fastboot_buf_addr, &fastboot_bytes_received, BOOTLOADER_DEK_BLOB)) {
+			printf("ERROR provision bootloader_dek_blob failed!\n");
+			strcpy(response, "FAILprovision bootloader_dek_blob failed!");
+		} else {
+			printf("Provision bootloader_dek_blob successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, FASTBOOT_GET_SPL_DEK_BLOB)) {
+		if (hwcrypto_get_dek_blob(fastboot_buf_addr, &fastboot_bytes_received, SPL_DEK_BLOB)) {
+			printf("ERROR get spl_dek_blob failed!\n");
+			strcpy(response, "FAILget spl_dek_blob failed!");
+		} else {
+			printf("Get spl_dek_blob successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, FASTBOOT_GET_BOOTLOADER_DEK_BLOB)) {
+		if (hwcrypto_get_dek_blob(fastboot_buf_addr, &fastboot_bytes_received, BOOTLOADER_DEK_BLOB)) {
+			printf("ERROR get bootloader_dek_blob failed!\n");
+			strcpy(response, "FAILget bootloader_dek_blob failed!");
+		} else {
+			printf("Get bootloader_dek_blob successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	}
+#ifdef CONFIG_ID_ATTESTATION
+	else if (endswith(cmd, FASTBOOT_SET_ATTESTATION_ID)) {
+		if (trusty_set_attestation_id()) {
+			printf("ERROR set device ids failed!\n");
+			strcpy(response, "FAILSet device ids failed!");
+		} else {
+			printf("Set device ids successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	}
+#endif
 #ifndef CONFIG_AVB_ATX
-	else if (endswith(cmd, FASTBOOT_SET_RPMB_KEY)) {
-		if (fastboot_set_rpmb_key(fastboot_buf_addr, fastboot_bytes_received)) {
-			printf("ERROR set rpmb key failed!\n");
-			strcpy(response, "FAILset rpmb key failed!");
+	else if (endswith(cmd, FASTBOOT_SET_RPMB_STAGED_KEY)) {
+		if (fastboot_set_rpmb_staged_key(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR set rpmb staged key failed!\n");
+			strcpy(response, "FAILset rpmb staged key failed!");
 		} else
 			strcpy(response, "OKAY");
-	} else if (endswith(cmd, FASTBOOT_SET_RPMB_RANDOM_KEY)) {
-		if (fastboot_set_rpmb_random_key()) {
-			printf("ERROR set rpmb random key failed!\n");
-			strcpy(response, "FAILset rpmb random key failed!");
+	} else if (endswith(cmd, FASTBOOT_SET_RPMB_HARDWARE_KEY)) {
+		if (fastboot_set_rpmb_hardware_key()) {
+			printf("ERROR set rpmb hardware key failed!\n");
+			strcpy(response, "FAILset rpmb hardware key failed!");
 		} else
 			strcpy(response, "OKAY");
+	} else if (endswith(cmd, FASTBOOT_ERASE_RPMB)) {
+		if (storage_erase_rpmb()) {
+			printf("ERROR erase rpmb storage failed!\n");
+			strcpy(response, "FAILerase rpmb storage failed!");
+		} else {
+			printf("erase rpmb storage succeed!\n");
+			strcpy(response, "OKAY");
+		}
 	} else if (endswith(cmd, FASTBOOT_SET_VBMETA_PUBLIC_KEY)) {
 		if (avb_set_public_key(fastboot_buf_addr,
 					fastboot_bytes_received))
@@ -667,7 +847,14 @@ static void flashing(char *cmd, char *response)
 	}
 #endif /* !CONFIG_AVB_ATX */
 #endif /* CONFIG_IMX_TRUSTY_OS */
-	else if (endswith(cmd, "unlock_critical")) {
+	else if (endswith(cmd, ERASE_UBOOT_ENV)) {
+		if(erase_uboot_env())
+			strcpy(response, "OKAY");
+		else {
+			printf("ERROR erase uboot environment variable failed!");
+		        strcpy(response, "FAILerase uboot environment variable failed!");
+		}
+	} else if (endswith(cmd, "unlock_critical")) {
 		strcpy(response, "OKAY");
 	} else if (endswith(cmd, "unlock")) {
 		printf("flashing unlock.\n");
@@ -722,6 +909,69 @@ static void flashing(char *cmd, char *response)
 }
 #endif /* CONFIG_FASTBOOT_LOCK */
 
+#ifdef CONFIG_IMX_MATTER_TRUSTY
+static void flashing(char *cmd, char *response)
+{
+	if (endswith(cmd, SET_MATTER_DAC_CERT)) {
+		if (trusty_set_dac_cert(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR set matter dac cert failed!\n");
+			strcpy(response, "FAILInternal error!");
+		} else {
+			printf("Set matter dac cert successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, SET_MATTER_PAI_CERT)) {
+		if (trusty_set_pai_cert(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR set matter pai cert failed!\n");
+			strcpy(response, "FAILInternal error!");
+		} else {
+			printf("Set matter pai cert successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, SET_MATTER_CD_CERT)) {
+		if (trusty_set_cd_cert(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR set matter cd cert failed!\n");
+			strcpy(response, "FAILInternal error!");
+		} else {
+			printf("Set matter cd cert successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, SET_MATTER_DAC_PRIKEY)) {
+		if (trusty_set_dac_prikey(fastboot_buf_addr, fastboot_bytes_received)) {
+			printf("ERROR set matter dac private key failed!\n");
+			strcpy(response, "FAILInternal error!");
+		} else {
+			printf("Set matter dac private key successfully!\n");
+			strcpy(response, "OKAY");
+		}
+	} else if (endswith(cmd, FASTBOOT_SET_RPMB_HARDWARE_KEY)) {
+		if (storage_set_rpmb_key()) {
+			printf("ERROR set rpmb hardware key failed!\n");
+			strcpy(response, "FAILset rpmb hardware key failed!");
+		} else
+			strcpy(response, "OKAY");
+	} else if (endswith(cmd, FASTBOOT_ERASE_RPMB)) {
+		if (storage_erase_rpmb()) {
+			printf("ERROR erase rpmb storage failed!\n");
+			strcpy(response, "FAILerase rpmb storage failed!");
+		} else {
+			printf("erase rpmb storage succeed!\n");
+			strcpy(response, "OKAY");
+		}
+	} else {
+		printf("Unknown oem command:%s\n", cmd);
+		strcpy(response, "FAILcommand not defined");
+	}
+
+	fastboot_tx_write_more(response);
+
+	/* Must call fastboot_none_resp before returning from the dispatch function
+	 *  which uses fastboot_tx_write_more
+	 */
+	fastboot_none_resp(response);
+}
+#endif
+
 #ifdef CONFIG_AVB_SUPPORT
 static void set_active_avb(char *cmd, char *response)
 {
@@ -734,6 +984,20 @@ static void set_active_avb(char *cmd, char *response)
 		return;
 	}
 
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+	if (virtual_ab_update_is_merging()) {
+		printf("Can not switch slot while snapshot merge is in progress!\n");
+		fastboot_fail("Snapshot merge is in progress!", response);
+		return;
+	}
+
+	/* Only output a warning when the image is snapshoted. */
+	if (virtual_ab_update_is_snapshoted())
+		printf("Warning: changing the active slot with a snapshot applied may cancel the update!\n");
+	else
+		printf("Warning: Virtual A/B is enabled, switch slot may make the system fail to boot. \n");
+#endif
+
 	slot = slotidx_from_suffix(cmd);
 
 	if (slot < 0) {
@@ -741,7 +1005,7 @@ static void set_active_avb(char *cmd, char *response)
 		return;
 	}
 
-	ret = avb_ab_mark_slot_active(&fsl_avb_ab_ops, slot);
+	ret = fsl_avb_ab_mark_slot_active(&fsl_avb_ab_ops, slot);
 	if (ret != AVB_IO_RESULT_OK)
 		fastboot_fail("avb IO error", response);
 	else
@@ -778,12 +1042,38 @@ static void flash(char *cmd, char *response)
 	}
 #endif
 
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+	if (partition_is_protected_during_merge(cmd)) {
+		printf("Can not flash partition %s while a snapshot update is in progress!\n", cmd);
+		fastboot_fail("Snapshot update is in progress", response);
+		return;
+	}
+#endif
+
 	fastboot_process_flash(cmd, fastboot_buf_addr,
 		fastboot_bytes_received, response);
+
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+	/* Cancel virtual AB update after image flash */
+	if (virtual_ab_update_is_merging() || virtual_ab_update_is_snapshoted())
+		virtual_ab_cancel_update();
+#endif
 
 #if defined(CONFIG_FASTBOOT_LOCK)
 	if (strncmp(cmd, "gpt", 3) == 0) {
 		int gpt_valid = 0;
+		int mmc_no;
+		struct blk_desc *dev_desc;
+		mmc_no = fastboot_devinfo.dev_id;
+		dev_desc = blk_get_dev("mmc", mmc_no);
+		if (dev_desc) {
+			if (dev_desc->part_type != PART_TYPE_EFI)
+				dev_desc->part_type = PART_TYPE_EFI;
+		}
+		else {
+			fastboot_fail("", response);
+			return;
+		}
 		gpt_valid = partition_table_valid();
 		/* If gpt is valid, load partitons table into memory.
 		   So if the next command is "fastboot reboot bootloader",
@@ -820,6 +1110,15 @@ static void erase(char *cmd, char *response)
 		return;
 	}
 #endif
+
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+	if (partition_is_protected_during_merge(cmd)) {
+		printf("Can not erase partition %s while a snapshot update is in progress!", cmd);
+		fastboot_fail("Snapshot update is in progress", response);
+		return;
+	}
+#endif
+
 	fastboot_process_erase(cmd, response);
 }
 #endif
@@ -832,7 +1131,7 @@ static void erase(char *cmd, char *response)
  * set with another way. Redefine this function to override the weak
  * definition to avoid error return value.
  */
-int fastboot_set_reboot_flag(void)
+int fastboot_set_reboot_flag(enum fastboot_reboot_reason reason)
 {
 	return 0;
 }
@@ -875,13 +1174,49 @@ void fastboot_acmd_complete(void)
  */
 static void run_acmd(char *cmd_parameter, char *response)
 {
-        if (!cmd_parameter) {
-                pr_err("missing slot suffix\n");
-                fastboot_fail("missing command", response);
-                return;
-        }
+	if (!cmd_parameter) {
+		pr_err("missing slot suffix\n");
+		fastboot_fail("missing command", response);
+		return;
+	}
+
+	if (strlen(cmd_parameter) >= sizeof(g_a_cmd_buff)) {
+		pr_err("input acmd is too long\n");
+		fastboot_fail("too long command", response);
+		return;
+	}
+
 	strcpy(g_a_cmd_buff, cmd_parameter);
 	fastboot_okay(NULL, response);
+}
+#endif
+
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+static void snapshot_update(char *cmd_parameter, char *response)
+{
+	if (endswith(cmd_parameter, "cancel")) {
+		FbLockState status;
+		status = fastboot_get_lock_stat();
+		if ((status == FASTBOOT_LOCK) || (status == FASTBOOT_LOCK_ERROR)) {
+			printf("Can not cancel snapshot update when the device is locked!\n");
+			fastboot_fail("device is locked!", response);
+		} else if (virtual_ab_update_is_merging() || virtual_ab_update_is_snapshoted()) {
+			if (virtual_ab_cancel_update() != -1)
+				fastboot_okay(NULL, response);
+			else
+				fastboot_fail("Can't cancel snapshot update!", response);
+		} else {
+			printf("Device is not in 'merging' or 'snapshotted' state, do nothing...\n");
+			fastboot_okay(NULL, response);
+		}
+
+		return;
+	} else {
+		printf("Error! Only 'cancel' is supported!");
+		strcpy(response, "FAILInternal error!");
+	}
+
+	return;
 }
 #endif
 
@@ -906,6 +1241,8 @@ static const struct {
 			.command = "flashing",
 			.dispatch = flashing,
 		},
+#endif
+#if defined(CONFIG_FASTBOOT_LOCK) || defined(CONFIG_IMX_MATTER_TRUSTY)
 		[FASTBOOT_COMMAND_OEM] = {
 			.command = "oem",
 			.dispatch = flashing,
@@ -969,6 +1306,12 @@ static const struct {
 			.dispatch = reboot_fastboot,
 		},
 #endif
+#ifdef CONFIG_VIRTUAL_AB_SUPPORT
+		[FASTBOOT_COMMAND_SNAPSHOT_UPDATE] = {
+			.command = "snapshot-update",
+			.dispatch = snapshot_update,
+		},
+#endif
 };
 
 /**
@@ -1009,4 +1352,10 @@ int fastboot_handle_command(char *cmd_string, char *response)
 	pr_err("command %s not recognized.\n", cmd_string);
 	fastboot_fail("unrecognized command", response);
 	return -1;
+}
+
+void fastboot_multiresponse(int cmd, char *response)
+{
+	pr_err("Unknown multiresponse command %d\n", cmd);
+	fastboot_fail("Unknown multiresponse command", response);
 }

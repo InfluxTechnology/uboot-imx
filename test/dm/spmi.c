@@ -14,9 +14,10 @@
 #include <power/pmic.h>
 #include <spmi/spmi.h>
 #include <asm/gpio.h>
+#include <test/test.h>
 #include <test/ut.h>
 
-/* Test if bus childs got probed propperly*/
+/* Test if bus children got probed properly*/
 static int dm_test_spmi_probe(struct unit_test_state *uts)
 {
 	const char *name = "spmi@0";
@@ -43,7 +44,7 @@ static int dm_test_spmi_probe(struct unit_test_state *uts)
 
 	return 0;
 }
-DM_TEST(dm_test_spmi_probe, DM_TESTF_SCAN_FDT);
+DM_TEST(dm_test_spmi_probe, UT_TESTF_SCAN_FDT);
 
 /* Test if it's possible to read bus directly and indirectly */
 static int dm_test_spmi_access(struct unit_test_state *uts)
@@ -68,7 +69,7 @@ static int dm_test_spmi_access(struct unit_test_state *uts)
 
 	return 0;
 }
-DM_TEST(dm_test_spmi_access, DM_TESTF_SCAN_FDT);
+DM_TEST(dm_test_spmi_access, UT_TESTF_SCAN_FDT);
 
 
 /* Test if it's possible to access GPIO that should be in pmic */
@@ -80,7 +81,7 @@ static int dm_test_spmi_access_peripheral(struct unit_test_state *uts)
 	int offset_count;
 
 	/* Get second pin of PMIC GPIO */
-	ut_assertok(gpio_lookup_name("spmi1", &dev, &offset, &gpio));
+	ut_assertok(gpio_lookup_name("pmic1", &dev, &offset, &gpio));
 
 	/* Check if PMIC is parent */
 	ut_asserteq(device_get_uclass_id(dev->parent), UCLASS_PMIC);
@@ -91,7 +92,7 @@ static int dm_test_spmi_access_peripheral(struct unit_test_state *uts)
 	name = gpio_get_bank_info(dev, &offset_count);
 
 	/* Check bank name */
-	ut_asserteq_str("spmi", name);
+	ut_asserteq_str("pmic", name);
 	/* Check pin count */
 	ut_asserteq(4, offset_count);
 
@@ -109,4 +110,4 @@ static int dm_test_spmi_access_peripheral(struct unit_test_state *uts)
 
 	return 0;
 }
-DM_TEST(dm_test_spmi_access_peripheral, DM_TESTF_SCAN_FDT);
+DM_TEST(dm_test_spmi_access_peripheral, UT_TESTF_SCAN_FDT);

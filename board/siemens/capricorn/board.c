@@ -6,8 +6,12 @@
  *
  */
 #include <common.h>
+#include <command.h>
 #include <dm.h>
+#include <env.h>
 #include <errno.h>
+#include <init.h>
+#include <log.h>
 #include <netdev.h>
 #include <env_internal.h>
 #include <fsl_esdhc_imx.h>
@@ -18,11 +22,12 @@
 #include <asm/gpio.h>
 #include <asm/arch/imx8-pins.h>
 #include <asm/arch/iomux.h>
-#include <asm/arch/sci/sci.h>
 #include <asm/arch/sys_proto.h>
 #ifndef CONFIG_SPL
 #include <asm/arch-imx8/clock.h>
 #endif
+#include <linux/delay.h>
+#include "../common/eeprom.h"
 #include "../common/factoryset.h"
 
 #define GPIO_PAD_CTRL \
@@ -142,7 +147,7 @@ static void enet_device_phy_reset(void)
 int setup_gpr_fec(void)
 {
 	sc_ipc_t ipc_handle = -1;
-	sc_err_t err = 0;
+	int err = 0;
 	unsigned int test;
 
 	/*
@@ -170,35 +175,35 @@ int setup_gpr_fec(void)
 	 */
 
 	err = sc_misc_set_control(ipc_handle, SC_R_ENET_1, SC_C_TXCLK, 1);
-	if (err != SC_ERR_NONE)
+	if (err)
 		printf("Error in setting up SC_C %d\n\r", SC_C_TXCLK);
 
 	sc_misc_get_control(ipc_handle, SC_R_ENET_1, SC_C_TXCLK, &test);
 	debug("TEST SC_C %d-->%d\n\r", SC_C_TXCLK, test);
 
 	err = sc_misc_set_control(ipc_handle, SC_R_ENET_1, SC_C_CLKDIV, 0);
-	if (err != SC_ERR_NONE)
+	if (err)
 		printf("Error in setting up SC_C %d\n\r", SC_C_CLKDIV);
 
 	sc_misc_get_control(ipc_handle, SC_R_ENET_1, SC_C_CLKDIV, &test);
 	debug("TEST SC_C %d-->%d\n\r", SC_C_CLKDIV, test);
 
 	err = sc_misc_set_control(ipc_handle, SC_R_ENET_1, SC_C_DISABLE_50, 0);
-	if (err != SC_ERR_NONE)
+	if (err)
 		printf("Error in setting up SC_C %d\n\r", SC_C_DISABLE_50);
 
 	sc_misc_get_control(ipc_handle, SC_R_ENET_1, SC_C_TXCLK, &test);
 	debug("TEST SC_C %d-->%d\n\r", SC_C_DISABLE_50, test);
 
 	err = sc_misc_set_control(ipc_handle, SC_R_ENET_1, SC_C_DISABLE_125, 1);
-	if (err != SC_ERR_NONE)
+	if (err)
 		printf("Error in setting up SC_C %d\n\r", SC_C_DISABLE_125);
 
 	sc_misc_get_control(ipc_handle, SC_R_ENET_1, SC_C_TXCLK, &test);
 	debug("TEST SC_C %d-->%d\n\r", SC_C_DISABLE_125, test);
 
 	err = sc_misc_set_control(ipc_handle, SC_R_ENET_1, SC_C_SEL_125, 1);
-	if (err != SC_ERR_NONE)
+	if (err)
 		printf("Error in setting up SC_C %d\n\r", SC_C_SEL_125);
 
 	sc_misc_get_control(ipc_handle, SC_R_ENET_1, SC_C_SEL_125, &test);
@@ -227,7 +232,7 @@ static int setup_fec(void)
 	return 0;
 }
 
-void reset_cpu(ulong addr)
+void reset_cpu(void)
 {
 }
 
@@ -238,10 +243,6 @@ static int board_led_init(void)
 	struct udevice *bus, *dev;
 	u8 pca_led[2] = { 0x00, 0x00 };
 	int ret;
-
-	/* init all GPIO LED's */
-	if (IS_ENABLED(CONFIG_LED))
-		led_default_state();
 
 	/* enable all leds on PCA9552 */
 	ret = uclass_get_device_by_seq(UCLASS_I2C, PCA9552_1_I2C_BUS, &bus);
@@ -288,7 +289,7 @@ int board_init(void)
 }
 
 #ifdef CONFIG_OF_BOARD_SETUP
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	return 0;
 }
@@ -336,13 +337,11 @@ void board_late_mmc_env_init(void)
 }
 
 #ifndef CONFIG_SPL_BUILD
-int factoryset_read_eeprom(int i2c_addr);
-
 static int load_parameters_from_factoryset(void)
 {
 	int ret;
 
-	ret = factoryset_read_eeprom(EEPROM_I2C_ADDR);
+	ret = factoryset_read_eeprom(SIEMENS_EE_I2C_ADDR);
 	if (ret)
 		return ret;
 
@@ -410,7 +409,7 @@ unsigned char get_button_state(char * const envname, unsigned char def)
  *		0 if button is not held down
  */
 static int
-do_userbutton(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+do_userbutton(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 {
 	int button = 0;
 
@@ -431,7 +430,7 @@ U_BOOT_CMD(
 #define ERST	IMX_GPIO_NR(0, 3)
 
 static int
-do_eth_reset(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+do_eth_reset(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 {
 	gpio_request(ERST, "ERST");
 	gpio_direction_output(ERST, 0);

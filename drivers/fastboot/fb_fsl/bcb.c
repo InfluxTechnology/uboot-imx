@@ -11,6 +11,7 @@
 #include <g_dnl.h>
 #include <mmc.h>
 #include "bcb.h"
+#include "command.h"
 #define ALIGN_BYTES 64 /*armv7 cache line need 64 bytes aligned */
 
 static ulong get_block_size(char *ifname, int dev)
@@ -26,13 +27,13 @@ static ulong get_block_size(char *ifname, int dev)
 	return dev_desc->blksz;
 }
 
-static int do_write(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+static int do_write(struct cmd_tbl *cmdtp, int flag, int argc, char * const argv[])
 {
 	char *ep;
 	struct blk_desc *dev_desc = NULL;
 	int dev;
 	int part = 0;
-	disk_partition_t part_info;
+	struct disk_partition part_info;
 	ulong offset = 0u;
 	ulong limit = 0u;
 	void *addr;
@@ -147,10 +148,10 @@ int bcb_rw_block(bool bread, char **ppblock,
 			return -1;
 		}
 		sprintf(addr_str, "0x%x", (unsigned int)(uintptr_t)p_block);
-		ret = do_raw_read(NULL, 0, 6, argv);
+		ret = do_rw(NULL, 0, 6, argv);
 		if (ret) {
 			free(p_block);
-			printf("do_raw_read failed, ret %d\n", ret);
+			printf("do_rw read failed, ret %d\n", ret);
 			return -1;
 		}
 

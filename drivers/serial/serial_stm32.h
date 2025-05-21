@@ -7,6 +7,7 @@
 #ifndef _SERIAL_STM32_
 #define _SERIAL_STM32_
 
+#include <linux/bitops.h>
 #define CR1_OFFSET(x)	(x ? 0x0c : 0x00)
 #define CR3_OFFSET(x)	(x ? 0x14 : 0x08)
 #define BRR_OFFSET(x)	(x ? 0x08 : 0x0c)
@@ -47,8 +48,8 @@ struct stm32_uart_info stm32h7_info = {
 };
 
 /* Information about a serial port */
-struct stm32x7_serial_platdata {
-	fdt_addr_t base;  /* address of registers in physical memory */
+struct stm32x7_serial_plat {
+	void __iomem *base;  /* address of registers in physical memory */
 	struct stm32_uart_info *uart_info;
 	unsigned long int clock_rate;
 };
@@ -65,6 +66,7 @@ struct stm32x7_serial_platdata {
 #define USART_CR3_OVRDIS		BIT(12)
 
 #define USART_ISR_TXE			BIT(7)
+#define USART_ISR_TC			BIT(6)
 #define USART_ISR_RXNE			BIT(5)
 #define USART_ISR_ORE			BIT(3)
 #define USART_ISR_FE			BIT(1)

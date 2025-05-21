@@ -5,10 +5,14 @@
 
 #include <common.h>
 #include <adc.h>
+#include <command.h>
+#include <env.h>
+#include <log.h>
 #include <asm/io.h>
 #include <asm/arch-rockchip/boot_mode.h>
 #include <dm/device.h>
 #include <dm/uclass.h>
+#include <linux/printk.h>
 
 #if (CONFIG_ROCKCHIP_BOOT_MODE_REG == 0)
 
@@ -92,7 +96,7 @@ int setup_boot_mode(void)
 	switch (boot_mode) {
 	case BOOT_FASTBOOT:
 		debug("%s: enter fastboot!\n", __func__);
-		env_set("preboot", "setenv preboot; fastboot usb0");
+		env_set("preboot", "setenv preboot; fastboot usb 0");
 		break;
 	case BOOT_UMS:
 		debug("%s: enter UMS!\n", __func__);

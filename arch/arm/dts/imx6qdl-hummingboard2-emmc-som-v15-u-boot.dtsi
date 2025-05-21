@@ -13,24 +13,58 @@
 			&gpio6 4 0
 		>;
 	};
+
+	wdt-reboot {
+		compatible = "wdt-reboot";
+		wdt = <&wdog1>;
+		bootph-pre-ram;
+	};
+};
+
+&soc {
+	bootph-all;
+};
+
+&aips1 {
+	bootph-all;
+};
+
+&pinctrl_microsom_uart1 {
+	bootph-all;
+};
+
+&uart1 {
+	bootph-all;
 };
 
 &gpio2 {
-	u-boot,dm-pre-reloc;
+	bootph-all;
 };
 
 &gpio3 {
-	u-boot,dm-pre-reloc;
+	bootph-all;
 };
 
 &gpio4 {
-	u-boot,dm-pre-reloc;
+	bootph-all;
 };
 
 &gpio6 {
-	u-boot,dm-pre-reloc;
+	bootph-all;
 };
 
 &usdhc1 {
 	status = "disabled";
+};
+
+&usdhc2 {
+	bootph-all;
+};
+
+&usdhc3 {
+	bootph-all;
+};
+
+&wdog1 {
+	bootph-pre-ram;
 };

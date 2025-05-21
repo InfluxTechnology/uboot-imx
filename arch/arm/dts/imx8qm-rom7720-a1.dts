@@ -10,6 +10,7 @@
 /memreserve/ 0x80000000 0x00020000;
 
 #include "fsl-imx8qm.dtsi"
+#include "imx8qm-u-boot.dtsi"
 
 / {
 	model = "Advantech iMX8QM Qseven series";
@@ -293,7 +294,7 @@
 &fec1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_fec1>;
-	phy-mode = "rgmii";
+	phy-mode = "rgmii-id";
 	phy-handle = <&ethphy0>;
 	fsl,ar8031-phy-fixup;
 	fsl,magic-packet;
@@ -318,7 +319,7 @@
 &fec2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_fec2>;
-	phy-mode = "rgmii";
+	phy-mode = "rgmii-id";
 	phy-handle = <&ethphy1>;
 	fsl,ar8031-phy-fixup;
 	fsl,magic-packet;

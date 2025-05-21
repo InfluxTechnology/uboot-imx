@@ -37,6 +37,8 @@ static lbaint_t mmc_sparse_write(struct sparse_storage *info,
 		fill_buf_num_blks = SPARSE_FILL_BUF_SIZE / info->blksz;
 
 		data = memalign(CONFIG_SYS_CACHELINE_SIZE, fill_buf_num_blks * info->blksz);
+		if (!data)
+			return ret;
 
 		while (blkcnt) {
 
@@ -171,7 +173,7 @@ static void process_flash_blkdev(const char *cmdbuf, void *download_buffer,
 				int dev_no = 0;
 				struct mmc *mmc;
 				struct blk_desc *dev_desc;
-				disk_partition_t info;
+				struct disk_partition info;
 				struct sparse_storage sparse;
 				int err;
 
@@ -293,7 +295,7 @@ static void process_erase_blkdev(const char *cmdbuf, char *response)
 	struct mmc *mmc;
 	struct blk_desc *dev_desc;
 	struct fastboot_ptentry *ptn;
-	disk_partition_t info;
+	struct disk_partition info;
 
 	ptn = fastboot_flash_find_ptn(cmdbuf);
 	if ((ptn == NULL) || (ptn->flags & FASTBOOT_PTENTRY_FLAGS_UNERASEABLE)) {
@@ -395,7 +397,7 @@ static void process_flash_sf(const char *cmdbuf, void *download_buffer,
 				return;
 			}
 			/* Erase */
-			sprintf(sf_command, "sf erase 0x%x 0x%x", ptn->start * blksz, /*start*/
+			sprintf(sf_command, "sf erase 0x%x 0x%lx", ptn->start * blksz, /*start*/
 			ptn->length * blksz /*size*/);
 			ret = run_command(sf_command, 0);
 			if (ret) {
@@ -421,7 +423,7 @@ static void process_flash_sf(const char *cmdbuf, void *download_buffer,
 	}
 }
 
-#ifdef CONFIG_ARCH_IMX8M
+#if defined(CONFIG_ARCH_IMX8M) || defined(CONFIG_IMX95)
 /* Check if the mcu image is built for running from TCM */
 static bool is_tcm_image(unsigned char *image_addr)
 {
@@ -465,7 +467,7 @@ void fastboot_process_flash(const char *cmdbuf, void *download_buffer,
 			process_flash_sf(cmdbuf, download_buffer,
 				download_bytes, response);
 			break;
-#ifdef CONFIG_ARCH_IMX8M
+#if defined(CONFIG_ARCH_IMX8M) || defined(CONFIG_IMX95)
 		case DEV_MMC:
 			if (is_tcm_image(download_buffer))
 				process_flash_blkdev(cmdbuf, download_buffer,
@@ -501,7 +503,7 @@ void process_erase_mmc(const char *cmdbuf, char *response)
 	struct mmc *mmc;
 	struct blk_desc *dev_desc;
 	struct fastboot_ptentry *ptn;
-	disk_partition_t info;
+	struct disk_partition info;
 
 	ptn = fastboot_flash_find_ptn(cmdbuf);
 	if ((ptn == NULL) || (ptn->flags & FASTBOOT_PTENTRY_FLAGS_UNERASEABLE)) {

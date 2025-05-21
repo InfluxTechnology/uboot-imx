@@ -81,8 +81,12 @@ steps will not work.
 1.3 Compile the CST to enable the encrypting feature
 ----------------------------------------------------
 
-The encrypting feature is not enabled by default. You need to
-execute the following commands to enable it:
+CST version 3.0.0 and later have the encryption feature enabled by default.
+If using an earlier version, the encryption feature must be explicitly
+enabled.
+
+For CST versions <3.0.0, the CST backend must be recompiled, execute the
+following commands to enable encryption support in CST:
 
   $ sudo apt-get install libssl-dev openssl
   $ cd <CST install directory>/code/back_end/src
@@ -273,6 +277,5 @@ will be detected and cause an error. A substitute encrypted boot image
 will not be decrypted, and will not be executed.
 
 References:
-[1] AN4581: "Secure Boot on i.MX 50, i.MX 53, i.MX 6 and i.MX 7 Series
-using HABv4" - Rev. 2
-[2] AN12056: "Encrypted Boot on HABv4 and CAAM Enabled Devices" - Rev. 1
+[1] AN4581: "i.MX Secure Boot on HABv4 Supported Devices"
+[2] AN12056: "Encrypted Boot on HABv4 and CAAM Enabled Devices"

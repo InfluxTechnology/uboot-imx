@@ -47,6 +47,7 @@
 		i2c2 = &i2c2;
 		i2c3 = &i2c3;
 		spi0 = &flexspi0;
+		spi1 = &lpspi3;
 		usb0 = &usbotg1;
 		usbphy0 = &usbphy1;
 		usb1 = &usbotg2;
@@ -868,7 +869,6 @@
 
 	tsens: thermal-sensor {
 		compatible = "nxp,imx8qxp-sc-tsens";
-		u-boot,dm-pre-reloc;
 		/* number of the temp sensor on the chip */
 		tsens-num = <2>;
 		#thermal-sensor-cells = <1>;
@@ -961,16 +961,16 @@
 	adma_lcdif: lcdif@5a180000 {
 		compatible = "fsl,imx8qxp-lcdif", "fsl,imx28-lcdif";
 		reg = <0x0 0x5a180000 0x0 0x10000>;
-		clocks = <&clk IMX8QXP_LCD_CLK>,
-			 <&clk IMX8QXP_LCD_PXL_CLK>,
+		clocks = <&clk IMX8QXP_LCD_DIV>,
+			 <&clk IMX8QXP_LCD_PXL_DIV>,
 			 <&clk IMX8QXP_LCD_IPG_CLK>;
 		clock-names = "pix", "disp_axi", "axi";
 		assigned-clocks = <&clk IMX8QXP_LCD_SEL>,
 				  <&clk IMX8QXP_LCD_PXL_SEL>,
 				  <&clk IMX8QXP_ELCDIF_PLL_DIV>;
-		assigned-clock-parents = <&clk IMX8QXP_ELCDIF_PLL>,
+		assigned-clock-parents = <&clk IMX8QXP_ELCDIF_PLL_DIV>,
 					 <&clk IMX8QXP_LCD_PXL_BYPASS_DIV>;
-		assigned-clock-rates = <0>, <24000000>, <804000000>;
+		assigned-clock-rates = <0>, <0>, <804000000>;
 		interrupts = <GIC_SPI 18 IRQ_TYPE_LEVEL_HIGH>;
 		power-domains = <&pd_dma_lcd0>;
 		status = "disabled";
@@ -1111,12 +1111,25 @@
 		power-domains = <&pd_conn_usbotg1_phy>;
 	};
 
+	usbmisc1: usbmisc@5b0d0200 {
+		#index-cells = <1>;
+		compatible = "fsl,imx7ulp-usbmisc", "fsl,imx6q-usbmisc";
+		reg = <0x0 0x5b0d0200 0x0 0x200>;
+	};
+
+	usbmisc2: usbmisc@5b0e0200 {
+		#index-cells = <1>;
+		compatible = "fsl,imx8dxl-usbmisc", "fsl,imx7ulp-usbmisc";
+		reg = <0x0 0x5b0e0200 0x0 0x200>;
+	};
+
 	usbotg1: usb@5b0d0000 {
 		compatible = "fsl,imx8qm-usb", "fsl,imx27-usb";
 		reg = <0x0 0x5b0d0000 0x0 0x200>;
 		interrupt-parent = <&wu>;
 		interrupts = <GIC_SPI 169 IRQ_TYPE_LEVEL_HIGH>;
 		fsl,usbphy = <&usbphy1>;
+		fsl,usbmisc = <&usbmisc1 0>;
 		clocks = <&clk IMX8QXP_CLK_DUMMY>;
 		ahb-burst-config = <0x0>;
 		tx-burst-size-dword = <0x10>;
@@ -1132,6 +1145,7 @@
 		interrupt-parent = <&wu>;
 		interrupts = <GIC_SPI 166 IRQ_TYPE_LEVEL_HIGH>;
 		fsl,usbphy = <&usbphy2>;
+		fsl,usbmisc = <&usbmisc2 0>;
 		clocks = <&clk IMX8QXP_CLK_DUMMY>;
 		ahb-burst-config = <0x0>;
 		tx-burst-size-dword = <0x10>;
@@ -1218,7 +1232,7 @@
 			<&clk IMX8QXP_GPMI_BCH_CLK>,
 			<&clk IMX8QXP_GPMI_APB_BCH_CLK>,
 			<&clk IMX8QXP_APBHDMA_CLK>;
-		clock-names = "gpmi_io", "gpmi_apb", "gpmi_bch", "gpmi_apb_bch", "gpmi_apbh_dma";
+		clock-names = "gpmi_io", "gpmi_apb", "gpmi_bch", "gpmi_bch_apb", "gpmi_apbh_dma";
 		dmas = <&dma_apbh 0>;
 		dma-names = "rx-tx";
 		power-domains = <&pd_conn_nand>;
@@ -1338,22 +1352,50 @@
 			 <&clk IMX8QXP_SPI0_IPG_CLK>;
 		clock-names = "per", "ipg";
 		assigned-clocks = <&clk IMX8QXP_SPI0_CLK>;
-		assigned-clock-rates = <20000000>;
+		assigned-clock-rates = <80000000>;
 		power-domains = <&pd_dma_lpspi0>;
+		status = "disabled";
+	};
+
+	lpspi1: lpspi@5a010000 {
+		compatible = "fsl,imx7ulp-spi";
+		reg = <0x0 0x5a010000 0x0 0x10000>;
+		interrupts = <GIC_SPI 119 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-parent = <&gic>;
+		clocks = <&clk IMX8QXP_SPI1_CLK>,
+			 <&clk IMX8QXP_SPI1_IPG_CLK>;
+		clock-names = "per", "ipg";
+		assigned-clocks = <&clk IMX8QXP_SPI1_CLK>;
+		assigned-clock-rates = <80000000>;
+		power-domains = <&pd_dma_lpspi1>;
 		status = "disabled";
 	};
 
 	lpspi2: lpspi@5a020000 {
 		compatible = "fsl,imx7ulp-spi";
 		reg = <0x0 0x5a020000 0x0 0x10000>;
-		interrupts = <GIC_SPI 119 IRQ_TYPE_LEVEL_HIGH>;
+		interrupts = <GIC_SPI 120 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-parent = <&gic>;
 		clocks = <&clk IMX8QXP_SPI2_CLK>,
 			 <&clk IMX8QXP_SPI2_IPG_CLK>;
 		clock-names = "per", "ipg";
 		assigned-clocks = <&clk IMX8QXP_SPI2_CLK>;
-		assigned-clock-rates = <20000000>;
+		assigned-clock-rates = <80000000>;
 		power-domains = <&pd_dma_lpspi2>;
+		status = "disabled";
+	};
+
+	lpspi3: lpspi@5a030000 {
+		compatible = "fsl,imx7ulp-spi";
+		reg = <0x0 0x5a030000 0x0 0x10000>;
+		interrupts = <GIC_SPI 121 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-parent = <&gic>;
+		clocks = <&clk IMX8QXP_SPI3_CLK>,
+			 <&clk IMX8QXP_SPI3_IPG_CLK>;
+		clock-names = "per", "ipg";
+		assigned-clocks = <&clk IMX8QXP_SPI3_CLK>;
+		assigned-clock-rates = <80000000>;
+		power-domains = <&pd_dma_lpspi3>;
 		status = "disabled";
 	};
 
@@ -1686,14 +1728,14 @@
 	};
 
 	eqos: ethernet@5b050000 {
-		compatible = "fsl,imx-eqos";
+		compatible = "nxp,imx8dxl-dwmac-eqos";
 		reg = <0x0 0x5b050000 0x0 0x10000>;
 		interrupt-parent = <&wu>;
 		interrupts = <GIC_SPI 163 IRQ_TYPE_LEVEL_HIGH>,
 				<GIC_SPI 162 IRQ_TYPE_LEVEL_HIGH>;
-		clocks = <&clk IMX8DXL_EQOS_ACLK>, <&clk IMX8DXL_EQOS_CSR_CLK>, <&clk IMX8DXL_EQOS_CLK>,
-			<&clk IMX8DXL_EQOS_PTP_CLK>;
-		clock-names = "aclk", "csr", "tx_clk", "ptp";
+		clocks = <&clk IMX8DXL_EQOS_ACLK>, <&clk IMX8DXL_EQOS_CSR_CLK>, <&clk IMX8DXL_EQOS_PTP_CLK>,
+			<&clk IMX8DXL_EQOS_CLK>, <&clk IMX8DXL_EQOS_MEM_CLK>;
+		clock-names = "stmmaceth", "pclk", "ptp_ref", "tx", "mem";
 		assigned-clocks = <&clk IMX8QXP_ENET1_ROOT_DIV>;
 		assigned-clock-rates = <125000000>;
 		power-domains = <&pd_conn_enet1>;
@@ -1738,14 +1780,15 @@
 	flexspi0: flexspi@05d120000 {
 		#address-cells = <1>;
 		#size-cells = <0>;
-		compatible = "fsl,imx8qxp-flexspi";
+		compatible = "nxp,imx8dxl-fspi";
 		reg = <0x0 0x5d120000 0x0 0x10000>, <0x0 0x08000000 0x0 0x10000000>;
-		reg-names = "FlexSPI", "FlexSPI-memory";
+		reg-names = "fspi_base", "fspi_mmap";
 		interrupts = <GIC_SPI 34 IRQ_TYPE_LEVEL_HIGH>;
-		clocks = <&clk IMX8QXP_LSIO_FSPI0_CLK>;
+		clocks = <&clk IMX8QXP_LSIO_FSPI0_CLK>,
+			<&clk IMX8QXP_LSIO_FSPI0_CLK>;
 		assigned-clocks = <&clk IMX8QXP_LSIO_FSPI0_DIV>;
 		assigned-clock-rates = <29000000>;
-		clock-names = "fspi";
+		clock-names = "fspi", "fspi_en";
 		power-domains = <&pd_lsio_flexspi0>;
 		status = "disabled";
 	};

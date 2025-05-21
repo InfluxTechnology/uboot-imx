@@ -6,7 +6,6 @@
 #ifndef PALMAS_H
 #define PALMAS_H
 
-#include <common.h>
 #include <i2c.h>
 
 /* I2C chip addresses, TW6035/37 */
@@ -117,7 +116,7 @@
 #define BB_VSEL_VBAT		(3 << 1)
 #define BB_CHRG_EN		(1 << 0)
 
-#ifndef CONFIG_DM_I2C
+#if !CONFIG_IS_ENABLED(DM_I2C)
 /*
  * Functions to read and write from TPS659038/TWL6035/TWL6037
  * or other Palmas family of TI PMICs

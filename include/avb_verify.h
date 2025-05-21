@@ -1,8 +1,6 @@
-
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * (C) Copyright 2018, Linaro Limited
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef	_AVB_VERIFY_H
@@ -38,7 +36,7 @@ struct mmc_part {
 	int dev_num;
 	struct mmc *mmc;
 	struct blk_desc *mmc_blk;
-	disk_partition_t info;
+	struct disk_partition info;
 };
 
 enum mmc_io_type {
@@ -54,7 +52,8 @@ char *avb_set_enforce_verity(const char *cmdline);
 char *avb_set_ignore_corruption(const char *cmdline);
 
 char *append_cmd_line(char *cmdline_orig, char *cmdline_new);
-
+const char *str_avb_io_error(AvbIOResult res);
+const char *str_avb_slot_error(AvbSlotVerifyResult res);
 /**
  * ============================================================================
  * I/O helper inline functions
@@ -72,12 +71,12 @@ static inline uint64_t calc_offset(struct mmc_part *part, int64_t offset)
 
 static inline size_t get_sector_buf_size(void)
 {
-	return (size_t)CONFIG_FASTBOOT_BUF_SIZE;
+	return (size_t)CONFIG_AVB_BUF_SIZE;
 }
 
 static inline void *get_sector_buf(void)
 {
-	return map_sysmem(CONFIG_FASTBOOT_BUF_ADDR, CONFIG_FASTBOOT_BUF_SIZE);
+	return map_sysmem(CONFIG_AVB_BUF_ADDR, CONFIG_AVB_BUF_SIZE);
 }
 
 static inline bool is_buf_unaligned(void *buffer)

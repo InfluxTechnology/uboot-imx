@@ -8,13 +8,15 @@
 #include <env.h>
 #include <errno.h>
 #include <init.h>
+#include <asm/global_data.h>
+#include <linux/delay.h>
 #include <linux/libfdt.h>
 #include <fsl_esdhc_imx.h>
 #include <fdt_support.h>
 #include <asm/io.h>
 #include <asm/gpio.h>
 #include <asm/arch/clock.h>
-#include <asm/arch/sci/sci.h>
+#include <firmware/imx/sci/sci.h>
 #include <asm/arch/imx8-pins.h>
 #include <asm/arch/snvs_security_sc.h>
 #include <asm/arch/iomux.h>
@@ -62,14 +64,6 @@ int board_early_init_f(void)
 
 	setup_iomux_uart();
 
-/* Dual bootloader feature will require CAAM access, but JR0 and JR1 will be
- * assigned to seco for imx8, use JR3 instead.
- */
-#if defined(CONFIG_SPL_BUILD) && defined(CONFIG_DUAL_BOOTLOADER)
-	sc_pm_set_resource_power_mode(-1, SC_R_CAAM_JR3, SC_PM_PW_MODE_ON);
-	sc_pm_set_resource_power_mode(-1, SC_R_CAAM_JR3_OUT, SC_PM_PW_MODE_ON);
-#endif
-
 	return 0;
 }
 
@@ -96,127 +90,6 @@ static void board_gpio_init(void)
 static inline void board_gpio_init(void) {}
 #endif
 
-#if IS_ENABLED(CONFIG_FEC_MXC)
-#include <miiphy.h>
-
-#ifndef CONFIG_DM_ETH
-static iomux_cfg_t pad_enet1[] = {
-	SC_P_SPDIF0_TX | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_SPDIF0_RX | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ESAI0_TX3_RX2 | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ESAI0_TX2_RX3 | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ESAI0_TX1 | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ESAI0_TX0 | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ESAI0_SCKR | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ESAI0_TX4_RX1 | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ESAI0_TX5_RX0 | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ESAI0_FST  | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ESAI0_SCKT | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ESAI0_FSR  | MUX_MODE_ALT(3) | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-
-	/* Shared MDIO */
-	SC_P_ENET0_MDC | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_MDIO | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-};
-
-static iomux_cfg_t pad_enet0[] = {
-	SC_P_ENET0_RGMII_RX_CTL | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXD0 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXD1 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXD2 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXD3 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_RXC | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
-	SC_P_ENET0_RGMII_TX_CTL | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXD0 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXD1 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXD2 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXD3 | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_RGMII_TXC | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-
-	/* Shared MDIO */
-	SC_P_ENET0_MDC | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-	SC_P_ENET0_MDIO | MUX_PAD_CTRL(ENET_NORMAL_PAD_CTRL),
-};
-
-static void setup_iomux_fec(void)
-{
-	if (0 == CONFIG_FEC_ENET_DEV)
-		imx8_iomux_setup_multiple_pads(pad_enet0, ARRAY_SIZE(pad_enet0));
-	else
-		imx8_iomux_setup_multiple_pads(pad_enet1, ARRAY_SIZE(pad_enet1));
-}
-
-static void enet_device_phy_reset(void)
-{
-	struct gpio_desc desc;
-	int ret;
-
-	/* The BB_PER_RST_B will reset the ENET1 PHY */
-	if (0 == CONFIG_FEC_ENET_DEV) {
-		ret = dm_gpio_lookup_name("gpio@1a_4", &desc);
-		if (ret)
-			return;
-
-		ret = dm_gpio_request(&desc, "enet0_reset");
-		if (ret)
-			return;
-
-		dm_gpio_set_dir_flags(&desc, GPIOD_IS_OUT);
-		dm_gpio_set_value(&desc, 0);
-		udelay(50);
-		dm_gpio_set_value(&desc, 1);
-	}
-
-	/* The board has a long delay for this reset to become stable */
-	mdelay(200);
-}
-
-int board_eth_init(bd_t *bis)
-{
-	int ret;
-	struct power_domain pd;
-
-	printf("[%s] %d\n", __func__, __LINE__);
-
-	/* Reset ENET PHY */
-	enet_device_phy_reset();
-
-	if (CONFIG_FEC_ENET_DEV) {
-		if (!power_domain_lookup_name("conn_enet1", &pd))
-			power_domain_on(&pd);
-	} else {
-		if (!power_domain_lookup_name("conn_enet0", &pd))
-			power_domain_on(&pd);
-	}
-
-	setup_iomux_fec();
-
-	ret = fecmxc_initialize_multi(bis, CONFIG_FEC_ENET_DEV,
-		CONFIG_FEC_MXC_PHYADDR, IMX_FEC_BASE);
-	if (ret)
-		printf("FEC1 MXC: %s:failed\n", __func__);
-
-	return ret;
-}
-#endif
-
-int board_phy_config(struct phy_device *phydev)
-{
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x1f);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x8);
-
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x00);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x82ee);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x05);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x100);
-
-	if (phydev->drv->config)
-		phydev->drv->config(phydev);
-
-	return 0;
-}
-#endif
-
 int checkboard(void)
 {
 #ifdef CONFIG_TARGET_IMX8DX_MEK
@@ -225,7 +98,6 @@ int checkboard(void)
 	puts("Board: iMX8QXP MEK\n");
 #endif
 
-	build_info();
 	print_bootinfo();
 
 	return 0;
@@ -289,7 +161,11 @@ static void setup_typec(void)
 	/* Enable SS MUX */
 	dm_gpio_set_dir_flags(&typec_en_desc, GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
 
-	tcpc_init(&port, port_config, &ss_mux_select);
+	ret = tcpc_init(&port, port_config, &ss_mux_select);
+	if (ret) {
+		printf("%s: tcpc init failed, err=%d\n", __func__, ret);
+		return;
+	}
 }
 #endif
 
@@ -340,7 +216,7 @@ int board_init(void)
 	setup_typec();
 #endif
 
-#ifdef CONFIG_SNVS_SEC_SC_AUTO
+#ifdef CONFIG_IMX_SNVS_SEC_SC_AUTO
 	{
 		int ret = snvs_security_sc_init();
 
@@ -362,13 +238,13 @@ void board_quiesce_devices(void)
 		"audio_ocram",
 	};
 
-	power_off_pd_devices(power_on_devices, ARRAY_SIZE(power_on_devices));
+	imx8_power_off_pd_devices(power_on_devices, ARRAY_SIZE(power_on_devices));
 }
 
 /*
  * Board specific reset that is system reset.
  */
-void reset_cpu(ulong addr)
+void reset_cpu(void)
 {
 	sc_pm_reboot(-1, SC_PM_RESET_TYPE_COLD);
 	while(1);
@@ -376,7 +252,7 @@ void reset_cpu(ulong addr)
 }
 
 #ifdef CONFIG_OF_BOARD_SETUP
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	return 0;
 }
@@ -385,7 +261,9 @@ int ft_board_setup(void *blob, bd_t *bd)
 int board_late_init(void)
 {
 	char *fdt_file;
-	bool m4_boot;
+	bool m4_booted;
+
+	build_info();
 
 #ifdef CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG
 	env_set("board_name", "MEK");
@@ -402,16 +280,16 @@ int board_late_init(void)
 #endif
 
 	fdt_file = env_get("fdt_file");
-	m4_boot = check_m4_parts_boot();
+	m4_booted = m4_parts_booted();
 
 	if (fdt_file && !strcmp(fdt_file, "undefined")) {
 #ifdef CONFIG_TARGET_IMX8DX_MEK
-		if (m4_boot)
+		if (m4_booted)
 			env_set("fdt_file", "imx8dx-mek-rpmsg.dtb");
 		else
 			env_set("fdt_file", "imx8dx-mek.dtb");
 #else
-		if (m4_boot)
+		if (m4_booted)
 			env_set("fdt_file", "imx8qxp-mek-rpmsg.dtb");
 		else
 			env_set("fdt_file", "imx8qxp-mek.dtb");
@@ -425,15 +303,6 @@ int board_late_init(void)
 	return 0;
 }
 
-#ifdef CONFIG_FSL_FASTBOOT
-#ifdef CONFIG_ANDROID_RECOVERY
-int is_recovery_key_pressing(void)
-{
-	return 0; /*TODO*/
-}
-#endif /*CONFIG_ANDROID_RECOVERY*/
-#endif /*CONFIG_FSL_FASTBOOT*/
-
 #ifdef CONFIG_ANDROID_SUPPORT
 bool is_power_key_pressed(void) {
 	sc_bool_t status = SC_FALSE;
@@ -442,3 +311,12 @@ bool is_power_key_pressed(void) {
 	return (bool)status;
 }
 #endif
+
+#ifdef CONFIG_FSL_FASTBOOT
+#ifdef CONFIG_ANDROID_RECOVERY
+int is_recovery_key_pressing(void)
+{
+	return 0; /* TODO */
+}
+#endif /* CONFIG_ANDROID_RECOVERY */
+#endif /* CONFIG_FSL_FASTBOOT */

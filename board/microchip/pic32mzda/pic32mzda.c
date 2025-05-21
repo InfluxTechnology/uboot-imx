@@ -10,6 +10,7 @@
 #include <common.h>
 #include <dm.h>
 #include <clk.h>
+#include <init.h>
 #include <malloc.h>
 #include <dt-bindings/clock/microchip,clock.h>
 #include <mach/pic32.h>
@@ -34,8 +35,6 @@ int checkboard(void)
 
 	rate = clk_get_rate(&clk);
 	printf("CPU Speed: %lu MHz\n", rate / 1000000);
-
-	clk_free(&clk);
 
 	return 0;
 }

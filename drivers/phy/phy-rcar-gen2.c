@@ -18,6 +18,7 @@
 #include <asm/io.h>
 #include <dm/device_compat.h>
 #include <linux/bitops.h>
+#include <linux/delay.h>
 #include <power/regulator.h>
 
 #define USBHS_LPSTS			0x02
@@ -171,7 +172,6 @@ static int rcar_gen2_phy_remove(struct udevice *dev)
 	struct rcar_gen2_phy *priv = dev_get_priv(dev);
 
 	clk_disable(&priv->clk);
-	clk_free(&priv->clk);
 
 	return 0;
 }
@@ -188,5 +188,5 @@ U_BOOT_DRIVER(rcar_gen2_phy) = {
 	.ops		= &rcar_gen2_phy_phy_ops,
 	.probe		= rcar_gen2_phy_probe,
 	.remove		= rcar_gen2_phy_remove,
-	.priv_auto_alloc_size = sizeof(struct rcar_gen2_phy),
+	.priv_auto	= sizeof(struct rcar_gen2_phy),
 };

@@ -5,12 +5,17 @@
  */
 
 #include <common.h>
+#include <command.h>
 #include <cpu.h>
 #include <cpu_func.h>
 #include <dm.h>
 #include <errno.h>
+#include <event.h>
+#include <init.h>
 #include <irq_func.h>
 #include <asm/cache.h>
+#include <asm/global_data.h>
+#include <asm/system.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -30,11 +35,17 @@ int checkboard(void)
 }
 #endif
 
-int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+void reset_cpu(void)
 {
 	disable_interrupts();
 	/* indirect call to go beyond 256MB limitation of toolchain */
 	nios2_callr(gd->arch.reset_addr);
+}
+
+int do_reset(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
+{
+	reset_cpu();
+
 	return 0;
 }
 
@@ -59,7 +70,7 @@ static void copy_exception_trampoline(void)
 }
 #endif
 
-int arch_cpu_init_dm(void)
+static int nios_cpu_setup(void)
 {
 	struct udevice *dev;
 	int ret;
@@ -68,15 +79,17 @@ int arch_cpu_init_dm(void)
 	if (ret)
 		return ret;
 
-	gd->ram_size = CONFIG_SYS_SDRAM_SIZE;
+	gd->ram_size = CFG_SYS_SDRAM_SIZE;
 #ifndef CONFIG_ROM_STUBS
 	copy_exception_trampoline();
 #endif
 
 	return 0;
 }
+EVENT_SPY_SIMPLE(EVT_DM_POST_INIT_F, nios_cpu_setup);
 
-static int altera_nios2_get_desc(struct udevice *dev, char *buf, int size)
+static int altera_nios2_get_desc(const struct udevice *dev, char *buf,
+				 int size)
 {
 	const char *cpu_name = "Nios-II";
 
@@ -87,7 +100,8 @@ static int altera_nios2_get_desc(struct udevice *dev, char *buf, int size)
 	return 0;
 }
 
-static int altera_nios2_get_info(struct udevice *dev, struct cpu_info *info)
+static int altera_nios2_get_info(const struct udevice *dev,
+				 struct cpu_info *info)
 {
 	info->cpu_freq = gd->cpu_clk;
 	info->features = (1 << CPU_FEAT_L1_CACHE) |
@@ -96,7 +110,7 @@ static int altera_nios2_get_info(struct udevice *dev, struct cpu_info *info)
 	return 0;
 }
 
-static int altera_nios2_get_count(struct udevice *dev)
+static int altera_nios2_get_count(const struct udevice *dev)
 {
 	return 1;
 }

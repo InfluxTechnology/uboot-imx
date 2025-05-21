@@ -9,11 +9,13 @@
 
 #include <common.h>
 #include <dm.h>
+#include <log.h>
 #include <malloc.h>
 #include <dm/read.h>
 #include <dma-uclass.h>
 #include <dt-structs.h>
 #include <errno.h>
+#include <linux/printk.h>
 
 #define SANDBOX_DMA_CH_CNT 3
 #define SANDBOX_DMA_BUF_SIZE 1024
@@ -38,9 +40,9 @@ struct sandbox_dma_dev {
 };
 
 static int sandbox_dma_transfer(struct udevice *dev, int direction,
-				void *dst, void *src, size_t len)
+				dma_addr_t dst, dma_addr_t src, size_t len)
 {
-	memcpy(dst, src, len);
+	memcpy((void *)dst, (void *)src, len);
 
 	return 0;
 }
@@ -279,5 +281,5 @@ U_BOOT_DRIVER(sandbox_dma) = {
 	.of_match = sandbox_dma_ids,
 	.ops	= &sandbox_dma_ops,
 	.probe = sandbox_dma_probe,
-	.priv_auto_alloc_size = sizeof(struct sandbox_dma_dev),
+	.priv_auto	= sizeof(struct sandbox_dma_dev),
 };

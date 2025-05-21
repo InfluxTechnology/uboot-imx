@@ -2,6 +2,9 @@
 /*
  * Copyright (C) 2019, STMicroelectronics - All Rights Reserved
  */
+
+#define LOG_CATEGORY UCLASS_RTC
+
 #include <common.h>
 #include <clk.h>
 #include <dm.h>
@@ -9,6 +12,7 @@
 #include <rtc.h>
 #include <asm/io.h>
 #include <dm/device_compat.h>
+#include <linux/bitops.h>
 #include <linux/iopoll.h>
 
 #define STM32_RTC_TR		0x00
@@ -219,10 +223,8 @@ static int stm32_rtc_init(struct udevice *dev)
 		return ret;
 
 	ret = clk_enable(&clk);
-	if (ret) {
-		clk_free(&clk);
+	if (ret)
 		return ret;
-	}
 
 	rate = clk_get_rate(&clk);
 
@@ -271,10 +273,8 @@ static int stm32_rtc_init(struct udevice *dev)
 unlock:
 	stm32_rtc_lock(dev);
 
-	if (ret) {
+	if (ret)
 		clk_disable(&clk);
-		clk_free(&clk);
-	}
 
 	return ret;
 }
@@ -294,17 +294,13 @@ static int stm32_rtc_probe(struct udevice *dev)
 		return ret;
 
 	ret = clk_enable(&clk);
-	if (ret) {
-		clk_free(&clk);
+	if (ret)
 		return ret;
-	}
 
 	ret = stm32_rtc_init(dev);
 
-	if (ret) {
+	if (ret)
 		clk_disable(&clk);
-		clk_free(&clk);
-	}
 
 	return ret;
 }
@@ -326,5 +322,5 @@ U_BOOT_DRIVER(rtc_stm32) = {
 	.probe	= stm32_rtc_probe,
 	.of_match = stm32_rtc_ids,
 	.ops	= &stm32_rtc_ops,
-	.priv_auto_alloc_size = sizeof(struct stm32_rtc_priv),
+	.priv_auto	= sizeof(struct stm32_rtc_priv),
 };

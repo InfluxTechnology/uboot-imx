@@ -4,6 +4,7 @@
  * Copyright (C) 2016 Grinn
  */
 
+#include <common.h>
 #include <command.h>
 #include <init.h>
 #include <asm/arch/clock.h>
@@ -14,11 +15,11 @@
 #include <asm/arch/mx6ul_pins.h>
 #include <asm/arch/mx6-pins.h>
 #include <asm/arch/sys_proto.h>
+#include <asm/global_data.h>
 #include <asm/gpio.h>
 #include <asm/mach-imx/iomux-v3.h>
 #include <asm/mach-imx/boot_mode.h>
 #include <asm/io.h>
-#include <common.h>
 #include <env.h>
 #include <fsl_esdhc_imx.h>
 #include <linux/sizes.h>
@@ -109,7 +110,7 @@ int board_mmc_getcd(struct mmc *mmc)
 	return ret;
 }
 
-int board_mmc_init(bd_t *bis)
+int board_mmc_init(struct bd_info *bis)
 {
 	int ret;
 

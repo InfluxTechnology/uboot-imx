@@ -9,11 +9,11 @@
  * (C) Copyright 2015 Vishnu Patekar <vishnupatekar0510@gmail.com>
  */
 
-#include <common.h>
 #include <asm/io.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/prcm.h>
 #include <asm/arch/sys_proto.h>
+#include <linux/delay.h>
 
 #ifdef CONFIG_SPL_BUILD
 void clock_init_safe(void)

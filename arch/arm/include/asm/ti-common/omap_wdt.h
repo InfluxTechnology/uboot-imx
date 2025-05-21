@@ -4,11 +4,15 @@
  *
  * OMAP Watchdog header file
  *
- * Copyright (C) 2011, Texas Instruments, Incorporated - http://www.ti.com/
+ * Copyright (C) 2011, Texas Instruments, Incorporated - https://www.ti.com/
  */
 
 #ifndef __OMAP_WDT_H__
 #define __OMAP_WDT_H__
+
+#ifndef __ASSEMBLY__
+#include <linux/bitops.h>
+#endif
 
 /*
  * Watchdog:

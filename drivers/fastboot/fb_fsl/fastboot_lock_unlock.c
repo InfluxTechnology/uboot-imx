@@ -5,6 +5,7 @@
 #include <common.h>
 #include <mapmem.h>
 #include <linux/types.h>
+#include <linux/delay.h>
 #include <part.h>
 #include <mmc.h>
 #include <ext_common.h>
@@ -19,10 +20,12 @@
 #include <asm/mach-imx/hab.h>
 #endif
 
+#include <fsl_avb.h>
+
 #ifdef FASTBOOT_ENCRYPT_LOCK
 
 #include <hash.h>
-#include <fsl_caam.h>
+#include <fsl_sec.h>
 
 //Encrypted data is 80bytes length.
 #define ENDATA_LEN 80
@@ -30,13 +33,14 @@
 #endif
 
 #ifdef CONFIG_AVB_WARNING_LOGO
-#include "lcd.h"
+#include "mxc_epdc_fb.h"
 #include "video.h"
 #include "dm/uclass.h"
 #include "fsl_avb_logo.h"
 #include "video_link.h"
 #include "video_console.h"
 #include "video_font_data.h"
+#include <dm.h>
 #endif
 
 int fastboot_flash_find_index(const char *name);
@@ -119,15 +123,19 @@ static FbLockState decrypt_lock_store(unsigned char* bdata) {
 }
 static inline int encrypt_lock_store(FbLockState lock, unsigned char* bdata) {
 	if (FASTBOOT_LOCK == lock)
-		strncpy((char *)bdata, "locked", strlen("locked"));
+		strncpy((char *)bdata, "locked", strlen("locked") + 1);
 	else if (FASTBOOT_UNLOCK == lock)
-		strncpy((char *)bdata, "unlocked", strlen("unlocked"));
+		strncpy((char *)bdata, "unlocked", strlen("unlocked") + 1);
 	else
 		return -1;
 	return 0;
 }
 #endif
 #else
+static u8 skeymod[] = {
+	0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08,
+	0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00
+};
 
 static int sha1sum(unsigned char* data, int len, unsigned char* output) {
 	struct hash_algo *algo;
@@ -150,14 +158,13 @@ static int generate_salt(unsigned char* salt) {
 
 }
 
-static FbLockState decrypt_lock_store(unsigned char *bdata) {
+static __maybe_unused FbLockState decrypt_lock_store(unsigned char *bdata) {
 	int p = 0, ret;
 	ALLOC_CACHE_ALIGN_BUFFER(uint8_t, plain_data, ENDATA_LEN);
+	ALLOC_CACHE_ALIGN_BUFFER(uint8_t, keymod, 16);
 
-	caam_open();
-	ret = caam_decap_blob((uint32_t)(ulong)plain_data,
-			      (uint32_t)(ulong)bdata + ROUND(ENDATA_LEN, ARCH_DMA_MINALIGN),
-			      ENDATA_LEN);
+	memcpy(keymod, skeymod, sizeof(skeymod));
+	ret = blob_decap(keymod, plain_data, bdata + ROUND(ENDATA_LEN, ARCH_DMA_MINALIGN), ENDATA_LEN);
 	if (ret != 0) {
 		printf("Error during blob decap operation: 0x%x\n",ret);
 		return FASTBOOT_LOCK_ERROR;
@@ -198,7 +205,8 @@ static FbLockState decrypt_lock_store(unsigned char *bdata) {
 		return plain_data[ENDATA_LEN-1];
 }
 
-static int encrypt_lock_store(FbLockState lock, unsigned char* bdata) {
+static __maybe_unused int encrypt_lock_store(FbLockState lock, unsigned char* bdata) {
+	ALLOC_CACHE_ALIGN_BUFFER(uint8_t, keymod, 16);
 	unsigned int p = 0;
 	int ret;
 	int salt_len = generate_salt(bdata);
@@ -214,12 +222,11 @@ static int encrypt_lock_store(FbLockState lock, unsigned char* bdata) {
 	//Set lock value
 	*(bdata + p) = lock;
 
-	caam_open();
-	ret = caam_gen_blob((uint32_t)(ulong)bdata,
-			(uint32_t)(ulong)bdata + ROUND(ENDATA_LEN, ARCH_DMA_MINALIGN),
-			ENDATA_LEN);
+	memcpy(keymod, skeymod, sizeof(skeymod));
+	ret = blob_encap(keymod, bdata, bdata + ROUND(ENDATA_LEN, ARCH_DMA_MINALIGN), ENDATA_LEN,
+			 0);
 	if (ret != 0) {
-		printf("error in caam_gen_blob:0x%x\n", ret);
+		printf("error in blob_encap:0x%x\n", ret);
 		return -1;
 	}
 
@@ -319,7 +326,7 @@ int fastboot_set_lock_stat(FbLockState lock) {
  */
 int fastboot_set_lock_stat(FbLockState lock) {
 	struct blk_desc *fs_dev_desc;
-	disk_partition_t fs_partition;
+	struct disk_partition fs_partition;
 	unsigned char *bdata;
 	int mmc_id;
 	int status, ret;
@@ -366,7 +373,7 @@ fail2:
 
 FbLockState fastboot_get_lock_stat(void) {
 	struct blk_desc *fs_dev_desc;
-	disk_partition_t fs_partition;
+	struct disk_partition fs_partition;
 	unsigned char *bdata;
 	int mmc_id;
 	FbLockState ret;
@@ -410,11 +417,11 @@ fail:
 #endif
 
 
-/* Return the last byte of of FSL_FASTBOOT_PR_DATA
- * which is managed by PresistDataService
+/* Return the last byte of of FASTBOOT_PARTITION_FBMISC
+ * which is managed by OemLockService
  */
 
-#ifdef CONFIG_ENABLE_LOCKSTATUS_SUPPORT
+#ifdef CFG_ENABLE_LOCKSTATUS_SUPPORT
 //Brillo has no presist data partition
 FbLockEnableResult fastboot_lock_enable(void) {
 	return FASTBOOT_UL_ENABLE;
@@ -424,7 +431,7 @@ void set_fastboot_lock_disable(void) {
 #else
 void set_fastboot_lock_disable(void) {
 	struct blk_desc *fs_dev_desc;
-	disk_partition_t fs_partition;
+	struct disk_partition fs_partition;
 	unsigned char *bdata;
 	int mmc_id;
 
@@ -433,7 +440,7 @@ void set_fastboot_lock_disable(void) {
 		return;
 	set_lock_disable_data(bdata);
 	int status;
-	mmc_id = fastboot_flash_find_index(FASTBOOT_PARTITION_PRDATA);
+	mmc_id = fastboot_flash_find_index(FASTBOOT_PARTITION_FBMISC);
 	if (mmc_id < 0) {
 		printf("%s: error in get mmc part\n", __FUNCTION__);
 		goto fail;
@@ -477,7 +484,7 @@ FbLockEnableResult fastboot_lock_enable() {
 #else /* CONFIG_IMX_TRUSTY_OS */
 	FbLockEnableResult ret;
 	struct blk_desc *fs_dev_desc;
-	disk_partition_t fs_partition;
+	struct disk_partition fs_partition;
 	unsigned char *bdata;
 	int mmc_id;
 
@@ -485,7 +492,7 @@ FbLockEnableResult fastboot_lock_enable() {
 	if (bdata == NULL)
 		return FASTBOOT_UL_ERROR;
 	int status;
-	mmc_id = fastboot_flash_find_index(FASTBOOT_PARTITION_PRDATA);
+	mmc_id = fastboot_flash_find_index(FASTBOOT_PARTITION_FBMISC);
 	if (mmc_id < 0) {
 		printf("%s: error in get mmc part\n", __FUNCTION__);
 		ret = FASTBOOT_UL_ERROR;
@@ -562,6 +569,8 @@ int display_lock(FbLockState lock, int verify) {
 int display_unlock_warning(void) {
 	int ret;
 	struct udevice *dev;
+	struct vidconsole_priv *priv;
+	int video_font_width, video_font_height;
 
 	ret = uclass_first_device_err(UCLASS_VIDEO, &dev);
 	if (!ret) {
@@ -576,32 +585,37 @@ int display_unlock_warning(void) {
 			printf("no text console device found!\n");
 			return -1;
 		}
+
+		priv = dev_get_uclass_priv(dev);
+		video_font_width = priv->x_charsize;
+		video_font_height = priv->y_charsize;
+
 		/* Adjust the cursor postion, the (x, y) are hard-coded here. */
-		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/VIDEO_FONT_WIDTH,
-						CONFIG_AVB_WARNING_LOGO_ROWS/VIDEO_FONT_HEIGHT + 6);
+		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/video_font_width,
+						CONFIG_AVB_WARNING_LOGO_ROWS/video_font_height + 6);
 		vidconsole_put_string(dev, "The bootloader is unlocked and software");
-		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/VIDEO_FONT_WIDTH,
-						CONFIG_AVB_WARNING_LOGO_ROWS/VIDEO_FONT_HEIGHT + 7);
+		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/video_font_width,
+						CONFIG_AVB_WARNING_LOGO_ROWS/video_font_height + 7);
 		vidconsole_put_string(dev, "integrity cannot be guaranteed. Any data");
-		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/VIDEO_FONT_WIDTH,
-						CONFIG_AVB_WARNING_LOGO_ROWS/VIDEO_FONT_HEIGHT + 8);
+		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/video_font_width,
+						CONFIG_AVB_WARNING_LOGO_ROWS/video_font_height + 8);
 		vidconsole_put_string(dev, "stored on the device may be available to");
-		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/VIDEO_FONT_WIDTH,
-						CONFIG_AVB_WARNING_LOGO_ROWS/VIDEO_FONT_HEIGHT + 9);
+		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/video_font_width,
+						CONFIG_AVB_WARNING_LOGO_ROWS/video_font_height + 9);
 		vidconsole_put_string(dev, "attackers. Do not store any sensitive data");
-		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/VIDEO_FONT_WIDTH,
-						CONFIG_AVB_WARNING_LOGO_ROWS/VIDEO_FONT_HEIGHT + 10);
+		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/video_font_width,
+						CONFIG_AVB_WARNING_LOGO_ROWS/video_font_height + 10);
 		vidconsole_put_string(dev, "on the device.");
 		/* Jump one line to show the link */
-		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/VIDEO_FONT_WIDTH,
-						CONFIG_AVB_WARNING_LOGO_ROWS/VIDEO_FONT_HEIGHT + 13);
+		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/video_font_width,
+						CONFIG_AVB_WARNING_LOGO_ROWS/video_font_height + 13);
 		vidconsole_put_string(dev, "Visit this link on another device:");
-		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/VIDEO_FONT_WIDTH,
-						CONFIG_AVB_WARNING_LOGO_ROWS/VIDEO_FONT_HEIGHT + 14);
+		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/video_font_width,
+						CONFIG_AVB_WARNING_LOGO_ROWS/video_font_height + 14);
 		vidconsole_put_string(dev, "g.co/ABH");
 
-		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/VIDEO_FONT_WIDTH,
-						CONFIG_AVB_WARNING_LOGO_ROWS/VIDEO_FONT_HEIGHT + 20);
+		vidconsole_position_cursor(dev, CONFIG_AVB_WARNING_LOGO_COLS/video_font_width,
+						CONFIG_AVB_WARNING_LOGO_ROWS/video_font_height + 20);
 		vidconsole_put_string(dev, "PRESS POWER BUTTON TO CONTINUE...");
 		/* sync frame buffer */
 		video_sync_all();
@@ -617,7 +631,7 @@ int display_unlock_warning(void) {
 int fastboot_wipe_data_partition(void)
 {
 	struct blk_desc *fs_dev_desc;
-	disk_partition_t fs_partition;
+	struct disk_partition fs_partition;
 	int status;
 	int mmc_id;
 	mmc_id = fastboot_flash_find_index(FASTBOOT_PARTITION_DATA);
@@ -643,7 +657,7 @@ int fastboot_wipe_data_partition(void)
 
 void fastboot_wipe_all(void) {
 	struct blk_desc *fs_dev_desc;
-	disk_partition_t fs_partition;
+	struct disk_partition fs_partition;
 	int status;
 	int mmc_id;
 	mmc_id = fastboot_flash_find_index(FASTBOOT_PARTITION_GPT);

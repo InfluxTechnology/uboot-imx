@@ -2,6 +2,7 @@
 /*
  * ENETC ethernet controller driver
  * Copyright 2019 NXP
+ * Copyright 2023 NXP
  */
 
 #include <common.h>
@@ -12,8 +13,15 @@
 #include <asm/io.h>
 #include <asm/processor.h>
 #include <miiphy.h>
+#include <power/regulator.h>
 
+#ifdef CONFIG_ARCH_IMX9
+#include "fsl_enetc4.h"
+#else
 #include "fsl_enetc.h"
+#endif
+#include <linux/delay.h>
+
 
 static void enetc_mdio_wait_bsy(struct enetc_mdio_priv *priv)
 {
@@ -22,6 +30,9 @@ static void enetc_mdio_wait_bsy(struct enetc_mdio_priv *priv)
 	while ((enetc_read(priv, ENETC_MDIO_CFG) & ENETC_EMDIO_CFG_BSY) &&
 	       --to)
 		cpu_relax();
+
+	udelay(1);
+
 	if (!to)
 		printf("T");
 }
@@ -112,7 +123,7 @@ static int enetc_mdio_bind(struct udevice *dev)
 	 * and some are not, use different naming scheme - enetc-N based on
 	 * PCI function # and enetc#N based on interface count
 	 */
-	if (ofnode_valid(dev->node))
+	if (ofnode_valid(dev_ofnode(dev)))
 		sprintf(name, "emdio-%u", PCI_FUNC(pci_get_devfn(dev)));
 	else
 		sprintf(name, "emdio#%u", eth_num_devices++);
@@ -124,8 +135,10 @@ static int enetc_mdio_bind(struct udevice *dev)
 static int enetc_mdio_probe(struct udevice *dev)
 {
 	struct enetc_mdio_priv *priv = dev_get_priv(dev);
+	int ret;
+	struct udevice *supply = NULL;
 
-	priv->regs_base = dm_pci_map_bar(dev, PCI_BASE_ADDRESS_0, 0);
+	priv->regs_base = dm_pci_map_bar(dev, PCI_BASE_ADDRESS_0, 0, 0, PCI_REGION_TYPE, 0);
 	if (!priv->regs_base) {
 		enetc_dbg(dev, "failed to map BAR0\n");
 		return -EINVAL;
@@ -133,22 +146,59 @@ static int enetc_mdio_probe(struct udevice *dev)
 
 	priv->regs_base += ENETC_MDIO_BASE;
 
+	if (CONFIG_IS_ENABLED(DM_REGULATOR)) {
+		ret = device_get_supply_regulator(dev, "phy-supply",
+						  &supply);
+		if (ret && ret != -ENOENT) {
+			printf("%s: device_get_supply_regulator failed: %d\n",
+			      __func__, ret);
+			return ret;
+		}
+
+		if (supply) {
+
+			regulator_set_enable(supply, false);
+			mdelay(100);
+
+			ret = regulator_set_enable_if_allowed(supply, true);
+			if (ret) {
+				printf("%s: Error enabling phy supply\n", dev->name);
+				return ret;
+			}
+		}
+	}
+
+
+#ifdef CONFIG_ARCH_IMX9
+	dm_pci_clrset_config16(dev, PCI_COMMAND, 0, PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
+#else
 	dm_pci_clrset_config16(dev, PCI_COMMAND, 0, PCI_COMMAND_MEMORY);
+#endif
 
 	return 0;
 }
 
+static const struct udevice_id enetc_mdio_of_match[] = {
+	{ .compatible = "fsl,enetc4-mdio" },
+	{ }
+};
+
 U_BOOT_DRIVER(enetc_mdio) = {
 	.name	= "enetc_mdio",
 	.id	= UCLASS_MDIO,
+	.of_match	= enetc_mdio_of_match,
 	.bind	= enetc_mdio_bind,
 	.probe	= enetc_mdio_probe,
 	.ops	= &enetc_mdio_ops,
-	.priv_auto_alloc_size = sizeof(struct enetc_mdio_priv),
+	.priv_auto	= sizeof(struct enetc_mdio_priv),
+	.plat_auto	= sizeof(struct mdio_perdev_priv),
 };
 
 static struct pci_device_id enetc_mdio_ids[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_FREESCALE, PCI_DEVICE_ID_ENETC_MDIO) },
+#ifdef CONFIG_ARCH_IMX9
+	{ PCI_DEVICE(PCI_VENDOR_ID_NXP, PCI_DEVICE_ID_EMDIO) },
+#endif
 	{ }
 };
 

@@ -30,6 +30,9 @@
  */
 
 #include <common.h>
+#include <log.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
 
 #include <bitfield.h>
 #include <errno.h>
@@ -162,14 +165,6 @@
 #endif
 #ifndef CONFIG_MV88E61XX_CPU_PORT
 #error Define CONFIG_MV88E61XX_CPU_PORT to the port the CPU is attached to
-#endif
-
-/*
- *  These are ports without PHYs that may be wired directly
- * to other serdes interfaces
- */
-#ifndef CONFIG_MV88E61XX_FIXED_PORTS
-#define CONFIG_MV88E61XX_FIXED_PORTS 0
 #endif
 
 /* ID register values for different switch models */
@@ -1132,7 +1127,7 @@ static int mv88e61xx_phy_startup(struct phy_device *phydev)
 	return 0;
 }
 
-static struct phy_driver mv88e61xx_driver = {
+U_BOOT_PHY_DRIVER(mv88e61xx) = {
 	.name = "Marvell MV88E61xx",
 	.uid = 0x01410eb1,
 	.mask = 0xfffffff0,
@@ -1143,7 +1138,7 @@ static struct phy_driver mv88e61xx_driver = {
 	.shutdown = &genphy_shutdown,
 };
 
-static struct phy_driver mv88e609x_driver = {
+U_BOOT_PHY_DRIVER(mv88e609x) = {
 	.name = "Marvell MV88E609x",
 	.uid = 0x1410c89,
 	.mask = 0xfffffff0,
@@ -1154,7 +1149,7 @@ static struct phy_driver mv88e609x_driver = {
 	.shutdown = &genphy_shutdown,
 };
 
-static struct phy_driver mv88e6071_driver = {
+U_BOOT_PHY_DRIVER(mv88e6071) = {
 	.name = "Marvell MV88E6071",
 	.uid = 0x1410db0,
 	.mask = 0xfffffff0,
@@ -1164,15 +1159,6 @@ static struct phy_driver mv88e6071_driver = {
 	.startup = mv88e61xx_phy_startup,
 	.shutdown = &genphy_shutdown,
 };
-
-int phy_mv88e61xx_init(void)
-{
-	phy_register(&mv88e61xx_driver);
-	phy_register(&mv88e609x_driver);
-	phy_register(&mv88e6071_driver);
-
-	return 0;
-}
 
 /*
  * Overload weak get_phy_id definition since we need non-standard functions

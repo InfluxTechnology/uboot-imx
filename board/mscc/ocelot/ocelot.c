@@ -4,7 +4,10 @@
  */
 
 #include <common.h>
+#include <image.h>
 #include <init.h>
+#include <log.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/addrspace.h>
 #include <asm/types.h>
@@ -12,6 +15,8 @@
 #include <led.h>
 #include <wait_bit.h>
 #include <miiphy.h>
+#include <linux/bitops.h>
+#include <linux/printk.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -73,11 +78,7 @@ int board_early_init_r(void)
 			ICPU_GENERAL_CTRL_IF_SI_OWNER(2));
 
 	/* Address of boot parameters */
-	gd->bd->bi_boot_params = CONFIG_SYS_SDRAM_BASE;
-
-	/* LED setup */
-	if (IS_ENABLED(CONFIG_LED))
-		led_default_state();
+	gd->bd->bi_boot_params = CFG_SYS_SDRAM_BASE;
 
 	return 0;
 }

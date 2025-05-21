@@ -16,6 +16,7 @@
 #include <asm/arch-mx7/mx7-pins.h>
 #include <asm/arch-mx7/clock.h>
 #include <asm/arch-mx7/mx7-ddr.h>
+#include <asm/sections.h>
 #include "common.h"
 
 #ifdef CONFIG_FSL_ESDHC_IMX
@@ -23,7 +24,7 @@
 static struct fsl_esdhc_cfg cl_som_imx7_spl_usdhc_cfg = {
 	USDHC1_BASE_ADDR, 0, 4};
 
-int board_mmc_init(bd_t *bis)
+int board_mmc_init(struct bd_info *bis)
 {
 	cl_som_imx7_usdhc1_pads_set();
 	cl_som_imx7_spl_usdhc_cfg.sdhc_clk = mxc_get_clock(MXC_ESDHC_CLK);
@@ -157,15 +158,15 @@ static void cl_som_imx7_spl_dram_cfg(void)
 	}
 }
 
-#ifdef CONFIG_SPL_SPI_SUPPORT
+#ifdef CONFIG_SPL_SPI
 
 static void cl_som_imx7_spl_spi_init(void)
 {
 	cl_som_imx7_espi1_pads_set();
 }
-#else /* !CONFIG_SPL_SPI_SUPPORT */
+#else /* !CONFIG_SPL_SPI */
 static void cl_som_imx7_spl_spi_init(void) {}
-#endif /* CONFIG_SPL_SPI_SUPPORT */
+#endif /* CONFIG_SPL_SPI */
 
 void board_init_f(ulong dummy)
 {

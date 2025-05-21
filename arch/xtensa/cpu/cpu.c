@@ -10,6 +10,7 @@
 
 #include <common.h>
 #include <command.h>
+#include <init.h>
 #include <vsprintf.h>
 #include <linux/stringify.h>
 #include <asm/global_data.h>
@@ -19,7 +20,7 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-gd_t *gd __attribute__((section(".data")));
+gd_t *gd __section(".data");
 
 #if defined(CONFIG_DISPLAY_CPUINFO)
 /*
@@ -44,7 +45,7 @@ int print_cpuinfo(void)
 
 int arch_cpu_init(void)
 {
-	gd->ram_size = CONFIG_SYS_SDRAM_SIZE;
+	gd->ram_size = CFG_SYS_SDRAM_SIZE;
 	return 0;
 }
 

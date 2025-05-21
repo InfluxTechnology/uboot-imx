@@ -6,14 +6,18 @@
  * Copyright (C) 2015 Bin Meng <bmeng.cn@gmail.com>
  */
 
+#define LOG_CATEGORY	UCLASS_RAM
+
 #include <common.h>
 #include <dm.h>
 #include <errno.h>
 #include <fdtdec.h>
+#include <log.h>
 #include <malloc.h>
 #include <net.h>
 #include <spi.h>
 #include <spi_flash.h>
+#include <asm/global_data.h>
 #include <asm/mrccache.h>
 #include <dm/device-internal.h>
 #include <dm/uclass-internal.h>
@@ -91,7 +95,7 @@ struct mrc_data_container *mrccache_find_current(struct mrc_region *entry)
  * @data_size:	Required data size of the new entry. Note that we assume that
  *	all cache entries are the same size
  *
- * @return next cache entry if found, NULL if we got to the end
+ * Return: next cache entry if found, NULL if we got to the end
  */
 static struct mrc_data_container *find_next_mrc_cache(struct mrc_region *entry,
 		struct mrc_data_container *prev, int data_size)
@@ -128,7 +132,7 @@ static struct mrc_data_container *find_next_mrc_cache(struct mrc_region *entry,
  * @sf:		SPI flash to write to
  * @entry:	Position and size of MRC cache in SPI flash
  * @cur:	Record to write
- * @return 0 if updated, -EEXIST if the record is the same as the latest
+ * Return: 0 if updated, -EEXIST if the record is the same as the latest
  * record, -EINVAL if the record is not valid, other error if SPI write failed
  */
 static int mrccache_update(struct udevice *sf, struct mrc_region *entry,
@@ -195,8 +199,8 @@ static void mrccache_setup(struct mrc_output *mrc, void *data)
 	cache->signature = MRC_DATA_SIGNATURE;
 	cache->data_size = mrc->len;
 	checksum = compute_ip_checksum(mrc->buf, cache->data_size);
-	debug("Saving %d bytes for MRC output data, checksum %04x\n",
-	      cache->data_size, checksum);
+	log_debug("Saving %d bytes for MRC output data, checksum %04x\n",
+		  cache->data_size, checksum);
 	cache->checksum = checksum;
 	cache->reserved = 0;
 	memcpy(cache->data, mrc->buf, cache->data_size);
@@ -232,6 +236,7 @@ int mrccache_get_region(enum mrc_type_t type, struct udevice **devp,
 	ulong map_base;
 	uint map_size;
 	uint offset;
+	ofnode node;
 	u32 reg[2];
 	int ret;
 
@@ -241,23 +246,36 @@ int mrccache_get_region(enum mrc_type_t type, struct udevice **devp,
 	 * memory map cannot be read.
 	 */
 	ret = uclass_find_first_device(UCLASS_SPI_FLASH, &dev);
-	if (!ret && !dev)
+	if (ret || !dev) {
+		/*
+		 * Fall back to searching the device tree since driver model
+		 * may not be ready yet (e.g. with FSPv1)
+		 */
+		node = ofnode_by_compatible(ofnode_null(), "jedec,spi-nor");
+		if (!ofnode_valid(node))
+			return log_msg_ret("Cannot find SPI flash\n", -ENOENT);
 		ret = -ENODEV;
-	if (ret)
-		return log_msg_ret("Cannot find SPI flash\n", ret);
-	ret = dm_spi_get_mmap(dev, &map_base, &map_size, &offset);
-	if (!ret) {
-		entry->base = map_base;
 	} else {
-		ret = dev_read_u32_array(dev, "memory-map", reg, 2);
+		ret = dm_spi_get_mmap(dev, &map_base, &map_size, &offset);
+		if (!ret)
+			entry->base = map_base;
+		node = dev_ofnode(dev);
+	}
+
+	/*
+	 * At this point we have entry->base if ret == 0. If not, then we have
+	 * the node and can look for memory-map
+	 */
+	if (ret) {
+		ret = ofnode_read_u32_array(node, "memory-map", reg, 2);
 		if (ret)
 			return log_msg_ret("Cannot find memory map\n", ret);
 		entry->base = reg[0];
 	}
 
 	/* Find the place where we put the MRC cache */
-	mrc_node = dev_read_subnode(dev, type == MRC_TYPE_NORMAL ?
-				    "rw-mrc-cache" : "rw-var-mrc-cache");
+	mrc_node = ofnode_find_subnode(node, type == MRC_TYPE_NORMAL ?
+				       "rw-mrc-cache" : "rw-var-mrc-cache");
 	if (!ofnode_valid(mrc_node))
 		return log_msg_ret("Cannot find node", -EPERM);
 
@@ -270,7 +288,8 @@ int mrccache_get_region(enum mrc_type_t type, struct udevice **devp,
 	if (devp)
 		*devp = dev;
 	debug("MRC cache type %d in '%s', offset %x, len %x, base %x\n",
-	      type, dev->name, entry->offset, entry->length, entry->base);
+	      type, dev ? dev->name : ofnode_get_name(node), entry->offset,
+	      entry->length, entry->base);
 
 	return 0;
 }
@@ -286,7 +305,7 @@ static int mrccache_save_type(enum mrc_type_t type)
 	mrc = &gd->arch.mrc[type];
 	if (!mrc->len)
 		return 0;
-	log_debug("Saving %#x bytes of MRC output data type %d to SPI flash\n",
+	log_debug("Saving %x bytes of MRC output data type %d to SPI flash\n",
 		  mrc->len, type);
 	ret = mrccache_get_region(type, &sf, &entry);
 	if (ret)

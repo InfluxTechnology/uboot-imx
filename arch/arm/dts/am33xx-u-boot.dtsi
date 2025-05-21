@@ -6,6 +6,14 @@
 
 / {
 	ocp {
-		u-boot,dm-pre-reloc;
+		bootph-all;
 	};
+};
+
+&prcm_clocks {
+	compatible = "simple-bus";
+};
+
+&scm_clocks {
+	compatible = "simple-bus";
 };

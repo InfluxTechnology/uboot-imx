@@ -7,13 +7,17 @@
 #include <common.h>
 #include <errno.h>
 #include <dm.h>
+#include <log.h>
+#include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/printk.h>
 #include <power/pmic.h>
 #include <power/regulator.h>
 #include <regmap.h>
 #include <syscon.h>
 #include <linux/bitops.h>
 #include <linux/ioport.h>
+#include <dm/device-internal.h>
 #include <dm/read.h>
 #ifdef CONFIG_MMC_OMAP36XX_PINS
 #include <asm/arch/sys_proto.h>
@@ -62,7 +66,7 @@ static int pbias_read(struct udevice *dev, uint reg, uint8_t *buff, int len)
 	return regmap_read(priv->regmap, priv->offset, (u32 *)buff);
 }
 
-static int pbias_ofdata_to_platdata(struct udevice *dev)
+static int pbias_of_to_plat(struct udevice *dev)
 {
 	struct pbias_priv *priv = dev_get_priv(dev);
 	struct udevice *syscon;
@@ -100,7 +104,8 @@ static int pbias_bind(struct udevice *dev)
 {
 	int children;
 
-	children = pmic_bind_children(dev, dev->node, pmic_children_info);
+	children = pmic_bind_children(dev, dev_ofnode(dev),
+				      pmic_children_info);
 	if (!children)
 		debug("%s: %s - no child found\n", __func__, dev->name);
 
@@ -127,8 +132,8 @@ U_BOOT_DRIVER(pbias_pmic) = {
 	.of_match = pbias_ids,
 	.bind = pbias_bind,
 	.ops = &pbias_ops,
-	.ofdata_to_platdata = pbias_ofdata_to_platdata,
-	.priv_auto_alloc_size = sizeof(struct pbias_priv),
+	.of_to_plat = pbias_of_to_plat,
+	.priv_auto	= sizeof(struct pbias_priv),
 };
 
 static const struct pbias_reg_info pbias_mmc_omap2430 = {
@@ -177,9 +182,9 @@ static const struct pbias_reg_info *pbias_reg_infos[] = {
 static int pbias_regulator_probe(struct udevice *dev)
 {
 	const struct pbias_reg_info **p = pbias_reg_infos;
-	struct dm_regulator_uclass_platdata *uc_pdata;
+	struct dm_regulator_uclass_plat *uc_pdata;
 
-	uc_pdata = dev_get_uclass_platdata(dev);
+	uc_pdata = dev_get_uclass_plat(dev);
 
 	while (*p) {
 		int rc;
@@ -206,7 +211,7 @@ static int pbias_regulator_probe(struct udevice *dev)
 	}
 
 	uc_pdata->type = REGULATOR_TYPE_OTHER;
-	dev->priv = (void *)*p;
+	dev_set_priv(dev, (void *)*p);
 
 	return 0;
 }

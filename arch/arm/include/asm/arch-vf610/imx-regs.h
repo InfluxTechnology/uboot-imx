@@ -103,9 +103,6 @@
 
 #define QSPI0_AMBA_BASE		0x20000000
 
-/* MUX mode and PAD ctrl are in one register */
-#define CONFIG_IOMUX_SHARE_CONF_REG
-
 #define FEC_QUIRK_ENET_MAC
 #define I2C_QUIRK_REG
 
@@ -302,6 +299,7 @@
 
 #if !(defined(__KERNEL_STRICT_NAMES) || defined(__ASSEMBLY__))
 #include <asm/types.h>
+#include <linux/bitops.h>
 
 /* System Reset Controller (SRC) */
 struct src {
@@ -474,6 +472,6 @@ struct mscm {
 	u32 cpxcfg3;
 };
 
-#endif	/* __ASSEMBLER__*/
+#endif	/* __ASSEMBLY__ */
 
 #endif	/* __ASM_ARCH_IMX_REGS_H__ */

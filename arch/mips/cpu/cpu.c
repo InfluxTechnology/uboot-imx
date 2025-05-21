@@ -4,25 +4,31 @@
  * Wolfgang Denk, DENX Software Engineering, <wd@denx.de>
  */
 
-#include <common.h>
+#include <cpu_func.h>
 #include <command.h>
+#include <init.h>
 #include <linux/compiler.h>
 #include <asm/cache.h>
 #include <asm/mipsregs.h>
 #include <asm/reboot.h>
 
-#ifndef CONFIG_SYSRESET
+#if !CONFIG_IS_ENABLED(SYSRESET)
 void __weak _machine_restart(void)
 {
-	fprintf(stderr, "*** reset failed ***\n");
+	puts("*** reset failed ***\n");
 
 	while (1)
 		/* NOP */;
 }
 
-int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+void reset_cpu(void)
 {
 	_machine_restart();
+}
+
+int do_reset(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
+{
+	reset_cpu();
 
 	return 0;
 }

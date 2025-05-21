@@ -5,16 +5,18 @@
 
 #include <common.h>
 #include <dm.h>
+#include <log.h>
 #include <video.h>
 #include <asm/arch/mbox.h>
 #include <asm/arch/msg.h>
+#include <asm/cache.h>
 
 static int bcm2835_video_probe(struct udevice *dev)
 {
-	struct video_uc_platdata *plat = dev_get_uclass_platdata(dev);
+	struct video_uc_plat *plat = dev_get_uclass_plat(dev);
 	struct video_priv *uc_priv = dev_get_uclass_priv(dev);
 	int ret;
-	int w, h, pitch;
+	int w, h, pitch, bpp;
 	ulong fb_base, fb_size, fb_start, fb_end;
 
 	debug("bcm2835: Query resolution...\n");
@@ -39,9 +41,23 @@ static int bcm2835_video_probe(struct udevice *dev)
 					DCACHE_WRITEBACK);
 	video_set_flush_dcache(dev, true);
 
+	bpp = pitch / w;
+	switch (bpp) {
+	case 2:
+		uc_priv->bpix = VIDEO_BPP16;
+		break;
+	case 4:
+		uc_priv->bpix = VIDEO_BPP32;
+		break;
+	default:
+		printf("bcm2835: unexpected bpp %d, pitch %d, width %d\n",
+		       bpp, pitch, w);
+		uc_priv->bpix = VIDEO_BPP32;
+		break;
+	}
+
 	uc_priv->xsize = w;
 	uc_priv->ysize = h;
-	uc_priv->bpix = VIDEO_BPP32;
 	plat->base = fb_base;
 	plat->size = fb_size;
 
@@ -50,7 +66,11 @@ static int bcm2835_video_probe(struct udevice *dev)
 
 static const struct udevice_id bcm2835_video_ids[] = {
 	{ .compatible = "brcm,bcm2835-hdmi" },
+	{ .compatible = "brcm,bcm2711-hdmi0" },
 	{ .compatible = "brcm,bcm2708-fb" },
+#if !IS_ENABLED(CONFIG_VIDEO_DT_SIMPLEFB)
+	{ .compatible = "simple-framebuffer" },
+#endif
 	{ }
 };
 

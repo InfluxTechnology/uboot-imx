@@ -5,6 +5,7 @@
 
 #include <common.h>
 #include <dm.h>
+#include <log.h>
 #include <rng.h>
 #include <virtio_types.h>
 #include <virtio.h>
@@ -19,7 +20,7 @@ struct virtio_rng_priv {
 static int virtio_rng_read(struct udevice *dev, void *data, size_t len)
 {
 	int ret;
-	unsigned int rsize;
+	unsigned int rsize = 1;
 	unsigned char buf[BUFFER_SIZE] __aligned(4);
 	unsigned char *ptr = data;
 	struct virtio_sg sg;
@@ -28,7 +29,12 @@ static int virtio_rng_read(struct udevice *dev, void *data, size_t len)
 
 	while (len) {
 		sg.addr = buf;
-		sg.length = min(len, sizeof(buf));
+		/*
+		 * Work around implementations which always return 8 bytes
+		 * less than requested, down to 0 bytes, which would
+		 * cause an endless loop otherwise.
+		 */
+		sg.length = min(rsize ? len : len + 8, sizeof(buf));
 		sgs[0] = &sg;
 
 		ret = virtqueue_add(priv->rng_vq, sgs, 0, 1);
@@ -39,6 +45,9 @@ static int virtio_rng_read(struct udevice *dev, void *data, size_t len)
 
 		while (!virtqueue_get_buf(priv->rng_vq, &rsize))
 			;
+
+		if (rsize > sg.length)
+			return -EIO;
 
 		memcpy(ptr, buf, rsize);
 		len -= rsize;
@@ -83,6 +92,6 @@ U_BOOT_DRIVER(virtio_rng) = {
 	.probe	= virtio_rng_probe,
 	.remove = virtio_reset,
 	.ops	= &virtio_rng_ops,
-	.priv_auto_alloc_size = sizeof(struct virtio_rng_priv),
+	.priv_auto	= sizeof(struct virtio_rng_priv),
 	.flags	= DM_FLAG_ACTIVE_DMA,
 };

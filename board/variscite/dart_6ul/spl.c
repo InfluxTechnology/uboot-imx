@@ -5,12 +5,14 @@
  */
 
 #include <common.h>
+#include <init.h>
 #include <spl.h>
 #include <asm/arch/clock.h>
 #include <asm/io.h>
 #include <asm/arch/mx6-ddr.h>
 #include <asm/arch/mx6-pins.h>
 #include <asm/arch/crm_regs.h>
+#include <asm/sections.h>
 #include <fsl_esdhc_imx.h>
 
 #define UART_PAD_CTRL  (PAD_CTL_PKE | PAD_CTL_PUE |		\
@@ -154,11 +156,11 @@ int board_mmc_getcd(struct mmc *mmc)
 	return 1;
 }
 
-int board_mmc_init(bd_t *bis)
+int board_mmc_init(struct bd_info *bis)
 {
 	int i, ret;
 
-	for (i = 0; i < CONFIG_SYS_FSL_USDHC_NUM; i++) {
+	for (i = 0; i < CFG_SYS_FSL_USDHC_NUM; i++) {
 		switch (i) {
 		case 0:
 			SETUP_IOMUX_PADS(usdhc1_pads);
@@ -197,9 +199,6 @@ void board_init_f(ulong dummy)
 	timer_init();
 
 	setup_iomux_uart();
-
-	/* iomux and setup of i2c */
-	board_early_init_f();
 
 	/* UART clocks enabled and gd valid - init serial console */
 	preloader_console_init();

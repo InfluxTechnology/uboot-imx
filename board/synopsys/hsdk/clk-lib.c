@@ -5,8 +5,10 @@
  */
 
 #include <clk.h>
+#include <log.h>
 #include <malloc.h>
 #include <dm/device.h>
+#include <linux/printk.h>
 
 #include "clk-lib.h"
 
@@ -22,8 +24,8 @@ int soc_clk_ctl(const char *name, ulong *rate, enum clk_ctl_ops ctl)
 	/* Dummy fmeas device, just to be able to use standard clk_* api */
 	struct udevice fmeas = {
 		.name = "clk-fmeas",
-		.node = ofnode_path("/clk-fmeas"),
 	};
+	dev_set_ofnode(&fmeas, ofnode_path("/clk-fmeas"));
 
 	ret = clk_get_by_name(&fmeas, name, &clk);
 	if (ret) {
@@ -53,8 +55,6 @@ int soc_clk_ctl(const char *name, ulong *rate, enum clk_ctl_ops ctl)
 	}
 
 	priv_rate = clk_get_rate(&clk);
-
-	clk_free(&clk);
 
 	mhz_rate = ceil(priv_rate, HZ_IN_MHZ);
 

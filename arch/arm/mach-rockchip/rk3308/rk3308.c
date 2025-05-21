@@ -3,14 +3,15 @@
  *Copyright (c) 2018 Rockchip Electronics Co., Ltd
  */
 #include <common.h>
+#include <init.h>
 #include <malloc.h>
 #include <asm/io.h>
 #include <asm/arch/grf_rk3308.h>
+#include <asm/arch-rockchip/bootrom.h>
 #include <asm/arch-rockchip/hardware.h>
 #include <asm/gpio.h>
 #include <debug_uart.h>
-
-DECLARE_GLOBAL_DATA_PTR;
+#include <linux/bitops.h>
 
 #include <asm/armv8/mmu.h>
 static struct mm_region rk3308_mem_map[] = {
@@ -139,6 +140,11 @@ enum {
 
 #define GPIO0_A4	4
 
+const char * const boot_devices[BROM_LAST_BOOTSOURCE + 1] = {
+	[BROM_BOOTSOURCE_EMMC] = "/mmc@ff490000",
+	[BROM_BOOTSOURCE_SD] = "/mmc@ff480000",
+};
+
 int rk_board_init(void)
 {
 	static struct rk3308_grf * const grf = (void *)GRF_BASE;
@@ -165,7 +171,7 @@ int rk_board_init(void)
 	return 0;
 }
 
-#if defined(CONFIG_DEBUG_UART)
+#ifdef CONFIG_DEBUG_UART_BOARD_INIT
 __weak void board_debug_uart_init(void)
 {
 	static struct rk3308_grf * const grf = (void *)GRF_BASE;

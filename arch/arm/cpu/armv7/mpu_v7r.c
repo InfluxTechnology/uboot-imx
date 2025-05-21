@@ -2,7 +2,7 @@
 /*
  * Cortex-R Memory Protection Unit specific code
  *
- * Copyright (C) 2018 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2018 Texas Instruments Incorporated - https://www.ti.com/
  *	Lokesh Vutla <lokeshvutla@ti.com>
  */
 
@@ -12,6 +12,7 @@
 #include <asm/armv7.h>
 #include <asm/system.h>
 #include <asm/barriers.h>
+#include <linux/bitops.h>
 #include <linux/compiler.h>
 
 #include <asm/armv7_mpu.h>

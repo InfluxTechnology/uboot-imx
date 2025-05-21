@@ -6,9 +6,12 @@
 #include <common.h>
 #include <binman.h>
 #include <binman_sym.h>
+#include <bootstage.h>
 #include <cbfs.h>
 #include <dm.h>
+#include <event.h>
 #include <init.h>
+#include <log.h>
 #include <spi.h>
 #include <spl.h>
 #include <spi_flash.h>
@@ -16,14 +19,14 @@
 #include <dm/uclass-internal.h>
 #include <asm/fsp2/fsp_internal.h>
 
-int arch_cpu_init_dm(void)
+int fsp_setup_pinctrl(void)
 {
 	struct udevice *dev;
 	ofnode node;
 	int ret;
 
 	/* Make sure pads are set up early in U-Boot */
-	if (spl_phase() != PHASE_BOARD_F)
+	if (!ll_boot_init() || spl_phase() != PHASE_BOARD_F)
 		return 0;
 
 	/* Probe all pinctrl devices to set up the pads */
@@ -39,6 +42,7 @@ int arch_cpu_init_dm(void)
 
 	return ret;
 }
+EVENT_SPY_SIMPLE(EVT_DM_POST_INIT_F, fsp_setup_pinctrl);
 
 #if !defined(CONFIG_TPL_BUILD)
 binman_sym_declare(ulong, intel_fsp_m, image_pos);
@@ -79,11 +83,11 @@ static int get_cbfs_fsp(enum fsp_type_t type, ulong map_base,
 	 * 'COREBOOT' (CBFS, size 1814528, offset 2117632).
 	 */
 	ulong cbfs_base = 0x205000;
-	ulong cbfs_size = 0x1bb000;
 	struct cbfs_priv *cbfs;
 	int ret;
 
-	ret = cbfs_init_mem(map_base + cbfs_base, cbfs_size, &cbfs);
+	ret = cbfs_init_mem(map_base + cbfs_base, CBFS_SIZE_UNKNOWN, true,
+			    &cbfs);
 	if (ret)
 		return ret;
 	if (!ret) {

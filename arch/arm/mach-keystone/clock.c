@@ -6,9 +6,9 @@
  *     Texas Instruments Incorporated, <www.ti.com>
  */
 
-#include <common.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/clock_defs.h>
+#include <linux/bitops.h>
 
 /* DEV and ARM speed definitions as specified in DEVSPEED register */
 int __weak speeds[DEVSPEED_NUMSPDS] = {

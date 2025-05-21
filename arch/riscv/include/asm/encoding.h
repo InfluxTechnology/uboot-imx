@@ -8,6 +8,9 @@
 #define RISCV_CSR_ENCODING_H
 
 #include <asm/csr.h>
+#ifndef __ASSEMBLY__
+#include <linux/bitops.h>
+#endif
 
 #if CONFIG_IS_ENABLED(RISCV_SMODE)
 #define MODE_PREFIX(__suffix)	s##__suffix
@@ -90,7 +93,7 @@
 #define DEFAULT_RSTVEC		0x00001000
 #define DEFAULT_NMIVEC		0x00001004
 #define DEFAULT_MTVEC		0x00001010
-#define CONFIG_STRING_ADDR	0x0000100C
+#define CFG_STRING_ADDR	0x0000100C
 #define EXT_IO_BASE		0x40000000
 #define DRAM_BASE		0x80000000
 

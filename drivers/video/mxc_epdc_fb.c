@@ -1,14 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Copyright (C) 2010-2016 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2023 NXP
  */
-/*
- * Based on STMP378X LCDIF
- * Copyright 2008 Embedded Alley Solutions, Inc All Rights Reserved.
- */
-
+#include <dm.h>
+#include <dm/device_compat.h>
 #include <common.h>
-#include <lcd.h>
+#include <video.h>
 #include <linux/list.h>
 #include <linux/err.h>
 #include <linux/types.h>
@@ -16,7 +14,10 @@
 
 #include <mxc_epdc_fb.h>
 #include <cpu_func.h>
-#include <asm/arch/sys_proto.h>
+#include <asm/cache.h>
+#include <asm/global_data.h>
+#include <linux/delay.h>
+#include <asm/mach-imx/sys_proto.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -349,13 +350,13 @@ static void draw_splash_screen(void)
 	debug("Splash screen update failed!\n");
 }
 
-void lcd_enable(void)
+void epdc_enable(void)
 {
-#ifdef CONFIG_MX6
-	if (check_module_fused(MX6_MODULE_EPDC)) {
-		return;
+	if (CONFIG_IS_ENABLED(IMX_MODULE_FUSE)) {
+		if (check_module_fused(MODULE_EPDC)) {
+			return;
+		}
 	}
-#endif
 
 	if (board_setup_logo_file(lcd_base)) {
 		debug("Load logo failed!\n");
@@ -372,13 +373,13 @@ void lcd_enable(void)
 	draw_splash_screen();
 }
 
-void lcd_disable(void)
+void epdc_disable(void)
 {
-#ifdef CONFIG_MX6
-	if (check_module_fused(MX6_MODULE_EPDC)) {
-		return;
+	if (CONFIG_IS_ENABLED(IMX_MODULE_FUSE)) {
+		if (check_module_fused(MODULE_EPDC)) {
+			return;
+		}
 	}
-#endif
 
 	debug("lcd_disable\n");
 
@@ -386,21 +387,21 @@ void lcd_disable(void)
 	REG_SET(EPDC_BASE, EPDC_CTRL, EPDC_CTRL_CLKGATE);
 }
 
-void lcd_panel_disable(void)
+void epdc_panel_disable(void)
 {
 	epdc_power_off();
 }
 
-void lcd_ctrl_init(void *lcdbase)
+void epdc_ctrl_init(void *lcdbase)
 {
 	unsigned int val;
 
-#ifdef CONFIG_MX6
-	if (check_module_fused(MX6_MODULE_EPDC)) {
-		printf("EPDC@0x%x is fused, disable it\n", EPDC_BASE_ADDR);
-		return;
+	if (CONFIG_IS_ENABLED(IMX_MODULE_FUSE)) {
+		if (check_module_fused(MODULE_EPDC)) {
+			printf("EPDC@0x%x is fused, disable it\n", EPDC_BASE_ADDR);
+			return;
+		}
 	}
-#endif
 
 	/*
 	 * We rely on lcdbase being a physical address, i.e., either MMU off,
@@ -441,7 +442,7 @@ void lcd_ctrl_init(void *lcdbase)
 		;
 
 	debug("resolution %dx%d, bpp %d\n", (int)panel_info.vl_col,
-		(int)panel_info.vl_row, NBITS(panel_info.vl_bpix));
+		(int)panel_info.vl_row, 1 << panel_info.vl_bpix);
 
 	/* Get EPDC version */
 	val = REG_RD(EPDC_BASE, EPDC_VERSION);
@@ -479,8 +480,64 @@ void lcd_ctrl_init(void *lcdbase)
 ulong calc_fbsize(void)
 {
 	return panel_info.vl_row * panel_info.vl_col * 2 \
-		* NBITS(panel_info.vl_bpix) / 8;
+		* (1 << panel_info.vl_bpix) / 8;
 }
 
+static int epdc_video_probe(struct udevice *dev)
+{
+	struct video_uc_plat *plat = dev_get_uclass_plat(dev);
+	struct video_priv *uc_priv = dev_get_uclass_priv(dev);
+	u32 fb_start, fb_end;
 
+	epdc_ctrl_init((void *)plat->base);
 
+	epdc_enable();
+
+	uc_priv->xsize = panel_info.vl_col;
+	uc_priv->ysize = panel_info.vl_row;
+
+	/* Enable dcache for the frame buffer */
+	fb_start = plat->base & ~(MMU_SECTION_SIZE - 1);
+	fb_end = plat->base + plat->size;
+	fb_end = ALIGN(fb_end, 1 << MMU_SECTION_SHIFT);
+	mmu_set_region_dcache_behaviour(fb_start, fb_end - fb_start,
+					DCACHE_WRITEBACK);
+	video_set_flush_dcache(dev, true);
+	gd->fb_base = plat->base;
+
+	return 0;
+}
+
+static int epdc_video_bind(struct udevice *dev)
+{
+	struct video_uc_plat *plat = dev_get_uclass_plat(dev);
+	plat->size = calc_fbsize();
+	plat->hide_logo = true;
+
+	return 0;
+}
+
+static int epdc_video_remove(struct udevice *dev)
+{
+	epdc_disable();
+
+	return 0;
+}
+
+static const struct udevice_id mxc_epdc_ids[] = {
+	{ .compatible = "fsl,imx6dl-epdc" },
+	{ .compatible = "fsl,imx6sl-epdc" },
+	{ .compatible = "fsl,imx6sll-epdc" },
+	{ .compatible = "fsl,imx7d-epdc" },
+	{ /* sentinel */ }
+};
+
+U_BOOT_DRIVER(mxc_epdc) = {
+	.name	= "mxc_epdc",
+	.id	= UCLASS_VIDEO,
+	.of_match = mxc_epdc_ids,
+	.bind	= epdc_video_bind,
+	.probe	= epdc_video_probe,
+	.remove = epdc_video_remove,
+	.flags	= DM_FLAG_PRE_RELOC | DM_FLAG_OS_PREPARE,
+};

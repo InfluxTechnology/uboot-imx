@@ -15,11 +15,13 @@
 
 #include <common.h>
 #include <dm/devres.h>
+#include <linux/bug.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <asm/io.h>
 #include <asm/gpio.h>
 #include <asm/hardware.h>
+#include <linux/printk.h>
 #include <mach/at91_matrix.h>
 #include <linux/list.h>
 #include <linux/usb/ch9.h>
@@ -1428,7 +1430,7 @@ static const struct at91_udc_caps at91sam9261_udc_caps = {
 };
 #endif
 
-int usb_gadget_handle_interrupts(int index)
+int dm_usb_gadget_handle_interrupts(struct udevice *dev)
 {
 	struct at91_udc *udc = controller;
 

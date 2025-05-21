@@ -21,11 +21,14 @@
  */
 
 #include <common.h>
+#include <blk.h>
 #include <ext_common.h>
 #include <ext4fs.h>
 #include "ext4_common.h"
 #include <div64.h>
 #include <malloc.h>
+#include <part.h>
+#include <uuid.h>
 
 int ext4fs_symlinknest;
 struct ext_filesystem ext_fs;
@@ -226,11 +229,11 @@ int ext4fs_read(char *buf, loff_t offset, loff_t len, loff_t *actread)
 }
 
 int ext4fs_probe(struct blk_desc *fs_dev_desc,
-		 disk_partition_t *fs_partition)
+		 struct disk_partition *fs_partition)
 {
 	ext4fs_set_blk_dev(fs_dev_desc, fs_partition);
 
-	if (!ext4fs_mount(fs_partition->size)) {
+	if (!ext4fs_mount()) {
 		ext4fs_close();
 		return -1;
 	}

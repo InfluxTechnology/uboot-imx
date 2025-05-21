@@ -25,6 +25,11 @@
 		stdout-patch = &uart2;
 	};
 
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x0 0x40000000 0 0x80000000>;
+	};
+
 	reg_usdhc2_vmmc: regulator-usdhc2 {
 		compatible = "regulator-fixed";
 		pinctrl-names = "default";
@@ -47,6 +52,18 @@
 	arm-supply = <&buck2_reg>;
 };
 
+&A53_1 {
+	cpu-supply = <&buck2_reg>;
+};
+
+&A53_2 {
+	cpu-supply = <&buck2_reg>;
+};
+
+&A53_3 {
+	cpu-supply = <&buck2_reg>;
+};
+
 &fec1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_fec1>;
@@ -62,6 +79,40 @@
 		ethphy0: ethernet-phy@0 {
 			compatible = "ethernet-phy-ieee802.3-c22";
 			reg = <0>;
+
+			/* Properties for the Atheros PHY */
+			at803x,led-act-blind-workaround;
+			at803x,eee-okay;
+			at803x,vddio-1p8v;
+
+			/* Properties for the Realtek PHY */
+			rtl821x,aldps-disable;
+			rtl821x,clkout-disable;
+
+			/* Properties applied to both PHYs but only needed for Realtek PHY*/
+			rx-internal-delay-ps = <2000>;
+			tx-internal-delay-ps = <2000>;
+			eee-broken-1000t;
+		};
+	};
+};
+
+&ddrc {
+	operating-points-v2 = <&ddrc_opp_table>;
+
+	ddrc_opp_table: opp-table {
+		compatible = "operating-points-v2";
+
+		opp-25M {
+			opp-hz = /bits/ 64 <25000000>;
+		};
+
+		opp-100M {
+			opp-hz = /bits/ 64 <100000000>;
+		};
+
+		opp-750M {
+			opp-hz = /bits/ 64 <750000000>;
 		};
 	};
 };
@@ -244,7 +295,7 @@
 	status = "okay";
 
 	adv_bridge: adv7535@3d {
-		compatible = "adi,adv7533";
+		compatible = "adi,adv7535";
 		reg = <0x3d>;
 		adi,addr-cec = <0x3c>;
 		adi,dsi-lanes = <4>;
@@ -275,13 +326,20 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usbotg1>;
 	dr_mode = "otg";
+	hnp-disable;
+	srp-disable;
+	adp-disable;
+	usb-role-switch;
+	disable-over-current;
+	samsung,picophy-pre-emp-curr-control = <3>;
+	samsung,picophy-dc-vol-level-adjust = <7>;
 	status = "okay";
 };
 
 &usbotg2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usbotg2>;
 	dr_mode = "host";
+	picophy,dc-vol-level-adjust = <7>;
+	picophy,pre-emp-curr-control = <3>;
 	status = "okay";
 };
 
@@ -350,10 +408,10 @@
 			fsl,pins = <
 				MX8MM_IOMUXC_ENET_MDC_ENET1_MDC		0x3
 				MX8MM_IOMUXC_ENET_MDIO_ENET1_MDIO	0x3
-				MX8MM_IOMUXC_ENET_TD3_ENET1_RGMII_TD3	0x1f
-				MX8MM_IOMUXC_ENET_TD2_ENET1_RGMII_TD2	0x1f
-				MX8MM_IOMUXC_ENET_TD1_ENET1_RGMII_TD1	0x1f
-				MX8MM_IOMUXC_ENET_TD0_ENET1_RGMII_TD0	0x1f
+				MX8MM_IOMUXC_ENET_TD3_ENET1_RGMII_TD3	0x1d
+				MX8MM_IOMUXC_ENET_TD2_ENET1_RGMII_TD2	0x1d
+				MX8MM_IOMUXC_ENET_TD1_ENET1_RGMII_TD1	0x1d
+				MX8MM_IOMUXC_ENET_TD0_ENET1_RGMII_TD0	0x1d
 				MX8MM_IOMUXC_ENET_RD3_ENET1_RGMII_RD3	0x91
 				MX8MM_IOMUXC_ENET_RD2_ENET1_RGMII_RD2	0x91
 				MX8MM_IOMUXC_ENET_RD1_ENET1_RGMII_RD1	0x91
@@ -361,8 +419,8 @@
 				MX8MM_IOMUXC_ENET_TXC_ENET1_RGMII_TXC	0x1f
 				MX8MM_IOMUXC_ENET_RXC_ENET1_RGMII_RXC	0x91
 				MX8MM_IOMUXC_ENET_RX_CTL_ENET1_RGMII_RX_CTL	0x91
-				MX8MM_IOMUXC_ENET_TX_CTL_ENET1_RGMII_TX_CTL	0x1f
-				MX8MM_IOMUXC_SAI2_RXC_GPIO4_IO22	0x19
+				MX8MM_IOMUXC_ENET_TX_CTL_ENET1_RGMII_TX_CTL	0x1d
+				MX8MM_IOMUXC_NAND_READY_B_GPIO3_IO16	0x142
 			>;
 		};
 
@@ -531,5 +589,3 @@
 	};
 };
 
-
-#include "imx8mm-evk-u-boot.dtsi"

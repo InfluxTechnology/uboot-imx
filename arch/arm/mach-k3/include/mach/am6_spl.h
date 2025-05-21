@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
- * Copyright (C) 2018 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2018 Texas Instruments Incorporated - https://www.ti.com/
  *	Lokesh Vutla <lokeshvutla@ti.com>
  */
 #ifndef _ASM_ARCH_AM6_SPL_H_
@@ -14,7 +14,8 @@
 #define BOOT_DEVICE_I2C			0x05
 #define BOOT_DEVICE_MMC2		0x06
 #define BOOT_DEVICE_ETHERNET		0x07
-#define BOOT_DEVICE_USB			0x08
+#define BOOT_DEVICE_DFU			0x08
+#define BOOT_DEVICE_USB			0x408
 #define BOOT_DEVICE_PCIE		0x09
 #define BOOT_DEVICE_UART		0x0a
 #define BOOT_DEVICE_NAND		0x0c

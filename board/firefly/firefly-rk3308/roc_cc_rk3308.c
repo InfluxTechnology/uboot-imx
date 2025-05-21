@@ -8,6 +8,7 @@
 #include <asm/io.h>
 #include <asm/arch/grf_rk3308.h>
 #include <asm/arch-rockchip/hardware.h>
+#include <linux/bitops.h>
 
 #if defined(CONFIG_DEBUG_UART)
 #define GRF_BASE	0xff000000
@@ -69,7 +70,7 @@ int rockchip_dnl_key_pressed(void)
 {
 	unsigned int val;
 
-	if (adc_channel_single_shot("saradc", 1, &val)) {
+	if (adc_channel_single_shot("saradc@ff1e0000", 1, &val)) {
 		printf("%s read adc key val failed\n", __func__);
 		return false;
 	}

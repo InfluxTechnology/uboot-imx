@@ -34,24 +34,34 @@
  */
 
 #include <common.h>
-#include <asm/io.h>
+#include <clk.h>
+#include <dm.h>
+#include <dm/device_compat.h>
 #include <malloc.h>
 #include <spi.h>
 #include <spi-mem.h>
-#include <dm.h>
-#include <clk.h>
+#include <asm/io.h>
+#ifdef CONFIG_FSL_LAYERSCAPE
+#include <asm/arch/clock.h>
+#include <asm/arch/soc.h>
+#include <asm/arch/speed.h>
+#endif
+#include <linux/bitops.h>
 #include <linux/kernel.h>
 #include <linux/sizes.h>
 #include <linux/iopoll.h>
 #include <linux/bug.h>
 #include <linux/err.h>
+#include <linux/delay.h>
 
 /*
  * The driver only uses one single LUT entry, that is updated on
  * each call of exec_op(). Index 0 is preset at boot with a basic
- * read operation, so let's use the last entry (31).
+ * read operation, so let's use the middle entry (15).
+ * for some platforms, this is the last entry
  */
-#define	SEQID_LUT			31
+#define	SEQID_LUT			15
+#define	SEQID_AHB_LUT			14
 
 /* Registers used by the driver */
 #define FSPI_MCR0			0x00
@@ -202,9 +212,15 @@
 
 #define FSPI_DLLACR			0xC0
 #define FSPI_DLLACR_OVRDEN		BIT(8)
+#define FSPI_DLLACR_SLVDLY(x)          ((x) << 3)
+#define FSPI_DLLACR_DLLRESET		BIT(1)
+#define FSPI_DLLACR_DLLEN              BIT(0)
 
 #define FSPI_DLLBCR			0xC4
 #define FSPI_DLLBCR_OVRDEN		BIT(8)
+#define FSPI_DLLBCR_SLVDLY(x)          ((x) << 3)
+#define FSPI_DLLBCR_DLLRESET		BIT(1)
+#define FSPI_DLLBCR_DLLEN              BIT(0)
 
 #define FSPI_STS0			0xE0
 #define FSPI_STS0_DLPHB(x)		((x) << 8)
@@ -218,6 +234,16 @@
 #define FSPI_STS1_IP_ERRID(x)		((x) << 16)
 #define FSPI_STS1_AHB_ERRCD(x)		((x) << 8)
 #define FSPI_STS1_AHB_ERRID(x)		(x)
+
+#define FSPI_STS2			0xE8
+#define FSPI_STS2_BREFLOCK		BIT(17)
+#define FSPI_STS2_BSLVLOCK		BIT(16)
+#define FSPI_STS2_AREFLOCK		BIT(1)
+#define FSPI_STS2_ASLVLOCK		BIT(0)
+#define FSPI_STS2_AB_LOCK		(FSPI_STS2_BREFLOCK | \
+					 FSPI_STS2_BSLVLOCK | \
+					 FSPI_STS2_AREFLOCK | \
+					 FSPI_STS2_ASLVLOCK)
 
 #define FSPI_AHBSPNST			0xEC
 #define FSPI_AHBSPNST_DATLFT(x)		((x) << 16)
@@ -239,6 +265,10 @@
 #define FSPI_LUT_OFFSET			(SEQID_LUT * 4 * 4)
 #define FSPI_LUT_REG(idx) \
 	(FSPI_LUT_BASE + FSPI_LUT_OFFSET + (idx) * 4)
+
+#define FSPI_AHB_LUT_OFFSET			(SEQID_AHB_LUT * 4 * 4)
+#define FSPI_AHB_LUT_REG(idx) \
+	(FSPI_LUT_BASE + FSPI_AHB_LUT_OFFSET + (idx) * 4)
 
 /* register map end */
 
@@ -301,6 +331,10 @@
 
 #define POLL_TOUT		5000
 #define NXP_FSPI_MAX_CHIPSELECT		4
+#define MHZ(x)	((x) * 1000000UL)
+
+/* Access flash memory using IP bus only */
+#define FSPI_QUIRK_USE_IP_ONLY		BIT(0)
 
 struct nxp_fspi_devtype_data {
 	unsigned int rxfifo;
@@ -310,8 +344,40 @@ struct nxp_fspi_devtype_data {
 	bool little_endian;
 };
 
-static const struct nxp_fspi_devtype_data lx2160a_data = {
+static struct nxp_fspi_devtype_data lx2160a_data = {
 	.rxfifo = SZ_512,       /* (64  * 64 bits)  */
+	.txfifo = SZ_1K,        /* (128 * 64 bits)  */
+	.ahb_buf_size = SZ_2K,  /* (256 * 64 bits)  */
+	.quirks = 0,
+	.little_endian = true,  /* little-endian    */
+};
+
+static struct nxp_fspi_devtype_data imx8mm_data = {
+	.rxfifo = SZ_512,       /* (64  * 64 bits)  */
+	.txfifo = SZ_1K,        /* (128 * 64 bits)  */
+	.ahb_buf_size = SZ_2K,  /* (256 * 64 bits)  */
+	.quirks = 0,
+	.little_endian = true,  /* little-endian    */
+};
+
+static const struct nxp_fspi_devtype_data imx8qxp_data = {
+	.rxfifo = SZ_512,       /* (64  * 64 bits)  */
+	.txfifo = SZ_1K,        /* (128 * 64 bits)  */
+	.ahb_buf_size = SZ_2K,  /* (256 * 64 bits)  */
+	.quirks = 0,
+	.little_endian = true,  /* little-endian    */
+};
+
+static const struct nxp_fspi_devtype_data imx8dxl_data = {
+	.rxfifo = SZ_512,       /* (64  * 64 bits)  */
+	.txfifo = SZ_1K,        /* (128 * 64 bits)  */
+	.ahb_buf_size = SZ_2K,  /* (256 * 64 bits)  */
+	.quirks = FSPI_QUIRK_USE_IP_ONLY,
+	.little_endian = true,  /* little-endian    */
+};
+
+static const struct nxp_fspi_devtype_data imx8ulp_data = {
+	.rxfifo = SZ_1K,       /* (128  * 64 bits)  */
 	.txfifo = SZ_1K,        /* (128 * 64 bits)  */
 	.ahb_buf_size = SZ_2K,  /* (256 * 64 bits)  */
 	.quirks = 0,
@@ -324,9 +390,18 @@ struct nxp_fspi {
 	void __iomem *ahb_addr;
 	u32 memmap_phy;
 	u32 memmap_phy_size;
+	int selected;
 	struct clk clk, clk_en;
-	const struct nxp_fspi_devtype_data *devtype_data;
+	struct nxp_fspi_devtype_data *devtype_data;
+#define FSPI_DTR_ODD_ADDR       (1 << 0)
+#define FSPI_RXCLKSRC_3		(1 << 1)
+	int flags;
 };
+
+static inline int needs_ip_only(struct nxp_fspi *f)
+{
+	return f->devtype_data->quirks & FSPI_QUIRK_USE_IP_ONLY;
+}
 
 /*
  * R/W functions for big- or little-endian registers:
@@ -418,10 +493,13 @@ static bool nxp_fspi_supports_op(struct spi_slave *slave,
 	    op->data.nbytes > f->devtype_data->txfifo)
 		return false;
 
-	return true;
+	if (op->cmd.dtr)
+		return spi_mem_dtr_supports_op(slave, op);
+	else
+		return spi_mem_default_supports_op(slave, op);
 }
 
-/* Instead of busy looping invoke readl_poll_timeout functionality. */
+/* Instead of busy looping invoke readl_poll_sleep_timeout functionality. */
 static int fspi_readl_poll_tout(struct nxp_fspi *f, void __iomem *base,
 				u32 mask, u32 delay_us,
 				u32 timeout_us, bool c)
@@ -432,11 +510,11 @@ static int fspi_readl_poll_tout(struct nxp_fspi *f, void __iomem *base,
 		mask = (u32)cpu_to_be32(mask);
 
 	if (c)
-		return readl_poll_timeout(base, reg, (reg & mask),
-					  timeout_us);
+		return readl_poll_sleep_timeout(base, reg, (reg & mask),
+						delay_us, timeout_us);
 	else
-		return readl_poll_timeout(base, reg, !(reg & mask),
-					  timeout_us);
+		return readl_poll_sleep_timeout(base, reg, !(reg & mask),
+						delay_us, timeout_us);
 }
 
 /*
@@ -466,12 +544,21 @@ static void nxp_fspi_prepare_lut(struct nxp_fspi *f,
 	int lutidx = 1, i;
 
 	/* cmd */
-	lutval[0] |= LUT_DEF(0, LUT_CMD, LUT_PAD(op->cmd.buswidth),
-			     op->cmd.opcode);
+	if (op->cmd.dtr) {
+		lutval[0] |= LUT_DEF(0, LUT_CMD_DDR, LUT_PAD(op->cmd.buswidth),
+				     op->cmd.opcode >> 8);
+		lutval[lutidx / 2] |= LUT_DEF(lutidx, LUT_CMD_DDR,
+					      LUT_PAD(op->cmd.buswidth),
+					      op->cmd.opcode & 0x00ff);
+		lutidx++;
+	} else {
+		lutval[0] |= LUT_DEF(0, LUT_CMD, LUT_PAD(op->cmd.buswidth),
+				     op->cmd.opcode);
+	}
 
 	/* addr bytes */
 	if (op->addr.nbytes) {
-		lutval[lutidx / 2] |= LUT_DEF(lutidx, LUT_ADDR,
+		lutval[lutidx / 2] |= LUT_DEF(lutidx, op->addr.dtr ? LUT_ADDR_DDR : LUT_ADDR,
 					      LUT_PAD(op->addr.buswidth),
 					      op->addr.nbytes * 8);
 		lutidx++;
@@ -479,7 +566,7 @@ static void nxp_fspi_prepare_lut(struct nxp_fspi *f,
 
 	/* dummy bytes, if needed */
 	if (op->dummy.nbytes) {
-		lutval[lutidx / 2] |= LUT_DEF(lutidx, LUT_DUMMY,
+		lutval[lutidx / 2] |= LUT_DEF(lutidx, op->dummy.dtr ? LUT_DUMMY_DDR : LUT_DUMMY,
 		/*
 		 * Due to FlexSPI controller limitation number of PAD for dummy
 		 * buswidth needs to be programmed as equal to data buswidth.
@@ -494,7 +581,8 @@ static void nxp_fspi_prepare_lut(struct nxp_fspi *f,
 	if (op->data.nbytes) {
 		lutval[lutidx / 2] |= LUT_DEF(lutidx,
 					      op->data.dir == SPI_MEM_DATA_IN ?
-					      LUT_NXP_READ : LUT_NXP_WRITE,
+					      (op->data.dtr ? LUT_READ_DDR : LUT_NXP_READ) :
+					      (op->data.dtr ? LUT_WRITE_DDR : LUT_NXP_WRITE),
 					      LUT_PAD(op->data.buswidth),
 					      0);
 		lutidx++;
@@ -511,15 +599,21 @@ static void nxp_fspi_prepare_lut(struct nxp_fspi *f,
 	for (i = 0; i < ARRAY_SIZE(lutval); i++)
 		fspi_writel(f, lutval[i], base + FSPI_LUT_REG(i));
 
-	dev_dbg(f->dev, "CMD[%x] lutval[0:%x \t 1:%x \t 2:%x \t 3:%x]\n",
-		op->cmd.opcode, lutval[0], lutval[1], lutval[2], lutval[3]);
+	if (op->data.nbytes && op->data.dir == SPI_MEM_DATA_IN &&
+		op->addr.nbytes) {
+		for (i = 0; i < ARRAY_SIZE(lutval); i++)
+			fspi_writel(f, lutval[i], base + FSPI_AHB_LUT_REG(i));
+	}
+
+	dev_dbg(f->dev, "CMD[%x] lutval[0:%x \t 1:%x \t 2:%x \t 3:%x], size: 0x%08x\n",
+		op->cmd.opcode, lutval[0], lutval[1], lutval[2], lutval[3], op->data.nbytes);
 
 	/* lock LUT */
 	fspi_writel(f, FSPI_LUTKEY_VALUE, f->iobase + FSPI_LUTKEY);
 	fspi_writel(f, FSPI_LCKER_LOCK, f->iobase + FSPI_LCKCR);
 }
 
-#if CONFIG_IS_ENABLED(CONFIG_CLK)
+#if CONFIG_IS_ENABLED(CLK)
 static int nxp_fspi_clk_prep_enable(struct nxp_fspi *f)
 {
 	int ret;
@@ -543,6 +637,57 @@ static void nxp_fspi_clk_disable_unprep(struct nxp_fspi *f)
 	clk_disable(&f->clk_en);
 }
 #endif
+
+__weak ulong get_fspi_clk(int dev_id)
+{
+	return 0;
+}
+
+static ulong nxp_fspi_get_speed(struct udevice *bus)
+{
+#if CONFIG_IS_ENABLED(CLK)
+	struct nxp_fspi *f = dev_get_priv(bus);
+
+	return clk_get_rate(&f->clk);
+#else
+	return get_fspi_clk(dev_seq(bus));
+#endif
+}
+
+static void nxp_fspi_dll_calibration(struct nxp_fspi *f)
+{
+	int ret;
+
+	/* Reset the DLL, set the DLLRESET to 1 and then set to 0 */
+	fspi_writel(f, FSPI_DLLACR_DLLRESET, f->iobase + FSPI_DLLACR);
+	fspi_writel(f, FSPI_DLLBCR_DLLRESET, f->iobase + FSPI_DLLBCR);
+	fspi_writel(f, 0, f->iobase + FSPI_DLLACR);
+	fspi_writel(f, 0, f->iobase + FSPI_DLLBCR);
+
+	/*
+	 * Enable the DLL calibration mode.
+	 * The delay target for slave delay line is:
+	 *   ((SLVDLYTARGET+1) * 1/32 * clock cycle of reference clock.
+	 * When clock rate > 100MHz, recommend SLVDLYTARGET is 0xF, which
+	 * means half of clock cycle of reference clock.
+	 */
+	fspi_writel(f, FSPI_DLLACR_DLLEN | FSPI_DLLACR_SLVDLY(0xF),
+		    f->iobase + FSPI_DLLACR);
+	fspi_writel(f, FSPI_DLLBCR_DLLEN | FSPI_DLLBCR_SLVDLY(0xF),
+		    f->iobase + FSPI_DLLBCR);
+
+	/* Wait to get REF/SLV lock */
+	ret = fspi_readl_poll_tout(f, f->iobase + FSPI_STS2, FSPI_STS2_AB_LOCK,
+				   0, POLL_TOUT, true);
+	if (ret)
+		dev_warn(f->dev, "DLL lock failed, please fix it!\n");
+
+	/*
+	 * For ERR050272, DLL lock status bit is not accurate,
+	 * wait for 4us more as a workaround.
+	 */
+	udelay(4);
+}
 
 /*
  * In FlexSPI controller, flash access is based on value of FSPI_FLSHXXCR0
@@ -586,6 +731,10 @@ static void nxp_fspi_select_mem(struct nxp_fspi *f, int chip_select)
 {
 	u64 size_kb;
 
+	/* Return if the selected chip-select is already active. */
+	if (f->selected == chip_select)
+		return;
+
 	/* Reset FLSHxxCR0 registers */
 	fspi_writel(f, 0, f->iobase + FSPI_FLSHA1CR0);
 	fspi_writel(f, 0, f->iobase + FSPI_FLSHA2CR0);
@@ -599,6 +748,7 @@ static void nxp_fspi_select_mem(struct nxp_fspi *f, int chip_select)
 		    4 * chip_select);
 
 	dev_dbg(f->dev, "Slave device [CS:%x] selected\n", chip_select);
+	f->selected = chip_select;
 }
 
 static void nxp_fspi_read_ahb(struct nxp_fspi *f, const struct spi_mem_op *op)
@@ -658,14 +808,45 @@ static void nxp_fspi_read_rxfifo(struct nxp_fspi *f,
 {
 	void __iomem *base = f->iobase;
 	int i, ret;
-	int len = op->data.nbytes;
+	int len, cnt;
 	u8 *buf = (u8 *)op->data.buf.in;
+
+	/* DTR with ODD address need read one more byte */
+	len = (f->flags & FSPI_DTR_ODD_ADDR) ? op->data.nbytes + 1 : op->data.nbytes;
+
+	/* handle the DTR with ODD address case */
+	if (f->flags & FSPI_DTR_ODD_ADDR) {
+		u8 tmp[8];
+		/* Wait for RXFIFO available */
+		ret = fspi_readl_poll_tout(f, f->iobase + FSPI_INTR,
+					   FSPI_INTR_IPRXWA, 0,
+					   POLL_TOUT, true);
+		WARN_ON(ret);
+		/*
+		 * DTR read always start from 2bytes alignment address,
+		 * if read from an odd address A, it actually read from
+		 * address A-1, need to discard the first byte here
+		 */
+		*(u32 *)tmp = fspi_readl(f, base + FSPI_RFDR);
+		*(u32 *)(tmp + 4) = fspi_readl(f, base + FSPI_RFDR + 4);
+		cnt = min(len, 8);
+		/* discard the first byte */
+		memcpy(buf, tmp + 1, cnt - 1);
+		len -= cnt;
+		buf = op->data.buf.in + cnt - 1;
+		f->flags &= ~FSPI_DTR_ODD_ADDR;
+
+		/* move the FIFO pointer */
+		fspi_writel(f, FSPI_INTR_IPRXWA, base + FSPI_INTR);
+	}
 
 	/*
 	 * Default value of water mark level is 8 bytes, hence in single
 	 * read request controller can read max 8 bytes of data.
 	 */
-	for (i = 0; i < ALIGN_DOWN(len, 8); i += 8) {
+	cnt = ALIGN_DOWN(len, 8);
+
+	for (i = 0; i < cnt;) {
 		/* Wait for RXFIFO available */
 		ret = fspi_readl_poll_tout(f, f->iobase + FSPI_INTR,
 					   FSPI_INTR_IPRXWA, 0,
@@ -674,6 +855,7 @@ static void nxp_fspi_read_rxfifo(struct nxp_fspi *f,
 
 		*(u32 *)(buf + i) = fspi_readl(f, base + FSPI_RFDR);
 		*(u32 *)(buf + i + 4) = fspi_readl(f, base + FSPI_RFDR + 4);
+		i += 8;
 		/* move the FIFO pointer */
 		fspi_writel(f, FSPI_INTR_IPRXWA, base + FSPI_INTR);
 	}
@@ -682,14 +864,14 @@ static void nxp_fspi_read_rxfifo(struct nxp_fspi *f,
 		u32 tmp;
 		int size, j;
 
-		buf = op->data.buf.in + i;
+		buf += i;
+		len -= i;
 		/* Wait for RXFIFO available */
 		ret = fspi_readl_poll_tout(f, f->iobase + FSPI_INTR,
 					   FSPI_INTR_IPRXWA, 0,
 					   POLL_TOUT, true);
 		WARN_ON(ret);
 
-		len = op->data.nbytes - i;
 		for (j = 0; j < op->data.nbytes - i; j += 4) {
 			tmp = fspi_readl(f, base + FSPI_RFDR + j);
 			size = min(len, 4);
@@ -723,10 +905,23 @@ static int nxp_fspi_do_op(struct nxp_fspi *f, const struct spi_mem_op *op)
 	 * the LUT at each exec_op() call. And also specify the DATA
 	 * length, since it's has not been specified in the LUT.
 	 */
-	fspi_writel(f, op->data.nbytes |
-		 (SEQID_LUT << FSPI_IPCR1_SEQID_SHIFT) |
-		 (seqnum << FSPI_IPCR1_SEQNUM_SHIFT),
-		 base + FSPI_IPCR1);
+
+	/*
+	 * DTR read always start from 2bytes alignment address,
+	 * if read from an odd address A, it actually read from
+	 * address A-1, need to read one more byte to get all
+	 * data needed.
+	 */
+	if (f->flags & FSPI_DTR_ODD_ADDR)
+		fspi_writel(f, (op->data.nbytes + 1) |
+			 (SEQID_LUT << FSPI_IPCR1_SEQID_SHIFT) |
+			 (seqnum << FSPI_IPCR1_SEQNUM_SHIFT),
+			 base + FSPI_IPCR1);
+	else
+		fspi_writel(f, op->data.nbytes |
+			 (SEQID_LUT << FSPI_IPCR1_SEQID_SHIFT) |
+			 (seqnum << FSPI_IPCR1_SEQNUM_SHIFT),
+			 base + FSPI_IPCR1);
 
 	/* Trigger the LUT now. */
 	fspi_writel(f, FSPI_IPCMD_TRG, base + FSPI_IPCMD);
@@ -740,6 +935,45 @@ static int nxp_fspi_do_op(struct nxp_fspi *f, const struct spi_mem_op *op)
 		nxp_fspi_read_rxfifo(f, op);
 
 	return err;
+}
+
+/*
+ * Sample Clock source selection for Flash Reading
+ * Four modes defined by fspi:
+ * mode 0: Dummy Read strobe generated by FlexSPI Controller
+ *         and loopback internally
+ * mode 1: Dummy Read strobe generated by FlexSPI Controller
+ *         and loopback from DQS pad
+ * mode 2: Reserved
+ * mode 3: Flash provided Read strobe and input from DQS pad
+ *
+ * fspi default use mode 0 after reset
+ */
+static void nxp_fspi_select_rx_sample_clk_source(struct nxp_fspi *f,
+						 const struct spi_mem_op *op)
+{
+	u32 reg;
+
+	/*
+	 * For 8-8-8-DTR mode, need to use mode 3 (Flash provided Read
+	 * strobe and input from DQS pad), otherwise read operaton may
+	 * meet issue.
+	 * This mode require flash device connect the DQS pad on board.
+	 * For other modes, still use mode 0, keep align with before.
+	 * spi_nor_suspend will disable 8-8-8-DTR mode, also need to
+	 * change the mode back to mode 0.
+	 */
+	if (!(f->flags & FSPI_RXCLKSRC_3) && op->cmd.dtr) {
+		reg = fspi_readl(f, f->iobase + FSPI_MCR0);
+		reg |= FSPI_MCR0_RXCLKSRC(3);
+		fspi_writel(f, reg, f->iobase + FSPI_MCR0);
+		f->flags |= FSPI_RXCLKSRC_3;
+	} else if ((f->flags & FSPI_RXCLKSRC_3) && !op->cmd.dtr) {
+		reg = fspi_readl(f, f->iobase + FSPI_MCR0);
+		reg &= ~FSPI_MCR0_RXCLKSRC(3);	/* select mode 0 */
+		fspi_writel(f, reg, f->iobase + FSPI_MCR0);
+		f->flags &= ~FSPI_RXCLKSRC_3;
+	}
 }
 
 static int nxp_fspi_exec_op(struct spi_slave *slave,
@@ -757,14 +991,18 @@ static int nxp_fspi_exec_op(struct spi_slave *slave,
 				   FSPI_STS0_ARB_IDLE, 1, POLL_TOUT, true);
 	WARN_ON(err);
 
+	nxp_fspi_select_rx_sample_clk_source(f, op);
+
 	nxp_fspi_prepare_lut(f, op);
 	/*
-	 * If we have large chunks of data, we read them through the AHB bus
-	 * by accessing the mapped memory. In all other cases we use
-	 * IP commands to access the flash.
+	 * If we have large chunks of data, we read them through the AHB bus by
+	 * accessing the mapped memory. In all other cases we use IP commands
+	 * to access the flash. Read via AHB bus may be corrupted due to
+	 * existence of an errata and therefore discard AHB read in such cases.
 	 */
 	if (op->data.nbytes > (f->devtype_data->rxfifo - 4) &&
-	    op->data.dir == SPI_MEM_DATA_IN) {
+	    op->data.dir == SPI_MEM_DATA_IN &&
+	    !needs_ip_only(f)) {
 		nxp_fspi_read_ahb(f, op);
 	} else {
 		if (op->data.nbytes && op->data.dir == SPI_MEM_DATA_OUT)
@@ -792,14 +1030,64 @@ static int nxp_fspi_adjust_op_size(struct spi_slave *slave,
 		if (op->data.nbytes > f->devtype_data->txfifo)
 			op->data.nbytes = f->devtype_data->txfifo;
 	} else {
+		/* need to handle the OCTAL DTR read with odd dtr case */
+		if ((op->addr.val & 1) && op->cmd.dtr && op->addr.dtr &&
+		    op->dummy.dtr && op->data.dtr) {
+			f->flags |= FSPI_DTR_ODD_ADDR;
+		}
+
 		if (op->data.nbytes > f->devtype_data->ahb_buf_size)
 			op->data.nbytes = f->devtype_data->ahb_buf_size;
 		else if (op->data.nbytes > (f->devtype_data->rxfifo - 4))
 			op->data.nbytes = ALIGN_DOWN(op->data.nbytes, 8);
 	}
 
+	/* Limit data bytes to RX FIFO in case of IP read only */
+	if (needs_ip_only(f) &&
+	    op->data.dir == SPI_MEM_DATA_IN &&
+	    op->data.nbytes > f->devtype_data->rxfifo) {
+		/*
+		 * adjust size to to odd number so the OCTAL DTR
+		 * read with odd address only triggers once, when
+		 * reading large chunks of data
+		 */
+		if (f->flags & FSPI_DTR_ODD_ADDR) {
+			op->data.nbytes = f->devtype_data->rxfifo
+					  - 4 - 1;
+		} else {
+			op->data.nbytes = f->devtype_data->rxfifo;
+		}
+	}
+
 	return 0;
 }
+
+#ifdef CONFIG_FSL_LAYERSCAPE
+static void erratum_err050568(struct nxp_fspi *f)
+{
+	struct sys_info sysinfo;
+	u32 svr = 0, freq = 0;
+
+	/* Check for LS1028A variants */
+	svr = SVR_SOC_VER(get_svr());
+	if (svr != SVR_LS1017A ||
+	    svr != SVR_LS1018A ||
+	    svr != SVR_LS1027A ||
+	    svr != SVR_LS1028A) {
+		dev_dbg(f->dev, "Errata applicable only for LS1028A variants\n");
+		return;
+	}
+
+	/* Read PLL frequency */
+	get_sys_info(&sysinfo);
+	freq = sysinfo.freq_systembus / 1000000; /* Convert to MHz */
+	dev_dbg(f->dev, "svr: %08x, Frequency: %dMhz\n", svr, freq);
+
+	/* Use IP bus only if PLL is 300MHz */
+	if (freq == 300)
+		f->devtype_data->quirks |= FSPI_QUIRK_USE_IP_ONLY;
+}
+#endif
 
 static int nxp_fspi_default_setup(struct nxp_fspi *f)
 {
@@ -807,18 +1095,26 @@ static int nxp_fspi_default_setup(struct nxp_fspi *f)
 	int ret, i;
 	u32 reg;
 
-#if CONFIG_IS_ENABLED(CONFIG_CLK)
-	/* disable and unprepare clock to avoid glitch pass to controller */
-	nxp_fspi_clk_disable_unprep(f);
-
+#if CONFIG_IS_ENABLED(CLK)
 	/* the default frequency, we will change it later if necessary. */
 	ret = clk_set_rate(&f->clk, 20000000);
-	if (ret)
+	if (ret < 0)
 		return ret;
 
 	ret = nxp_fspi_clk_prep_enable(f);
 	if (ret)
 		return ret;
+#endif
+
+#ifdef CONFIG_FSL_LAYERSCAPE
+	/*
+	 * ERR050568: Flash access by FlexSPI AHB command may not work with
+	 * platform frequency equal to 300 MHz on LS1028A.
+	 * LS1028A reuses LX2160A compatible entry. Make errata applicable for
+	 * Layerscape LS1028A platform family.
+	 */
+	if (device_is_compatible(f->dev, "nxp,lx2160a-fspi"))
+		erratum_err050568(f);
 #endif
 
 	/* Reset the module */
@@ -835,7 +1131,8 @@ static int nxp_fspi_default_setup(struct nxp_fspi *f)
 	fspi_writel(f, FSPI_DLLBCR_OVRDEN, base + FSPI_DLLBCR);
 
 	/* enable module */
-	fspi_writel(f, FSPI_MCR0_AHB_TIMEOUT(0xFF) | FSPI_MCR0_IP_TIMEOUT(0xFF),
+	fspi_writel(f, (u32)FSPI_MCR0_AHB_TIMEOUT(0xFF) |
+		    FSPI_MCR0_IP_TIMEOUT(0xFF) | FSPI_MCR0_OCTCOMB_EN,
 		    base + FSPI_MCR0);
 
 	/*
@@ -861,11 +1158,20 @@ static int nxp_fspi_default_setup(struct nxp_fspi *f)
 	fspi_writel(f, FSPI_AHBCR_PREF_EN | FSPI_AHBCR_RDADDROPT,
 		    base + FSPI_AHBCR);
 
+	/* Reset the flashx control1 registers */
+	reg = FSPI_FLSHXCR1_TCSH(0x3) | FSPI_FLSHXCR1_TCSS(0x3);
+	fspi_writel(f, reg, base + FSPI_FLSHA1CR1);
+	fspi_writel(f, reg, base + FSPI_FLSHA2CR1);
+	fspi_writel(f, reg, base + FSPI_FLSHB1CR1);
+	fspi_writel(f, reg, base + FSPI_FLSHB2CR1);
+
 	/* AHB Read - Set lut sequence ID for all CS. */
-	fspi_writel(f, SEQID_LUT, base + FSPI_FLSHA1CR2);
-	fspi_writel(f, SEQID_LUT, base + FSPI_FLSHA2CR2);
-	fspi_writel(f, SEQID_LUT, base + FSPI_FLSHB1CR2);
-	fspi_writel(f, SEQID_LUT, base + FSPI_FLSHB2CR2);
+	fspi_writel(f, SEQID_AHB_LUT, base + FSPI_FLSHA1CR2);
+	fspi_writel(f, SEQID_AHB_LUT, base + FSPI_FLSHA2CR2);
+	fspi_writel(f, SEQID_AHB_LUT, base + FSPI_FLSHB1CR2);
+	fspi_writel(f, SEQID_AHB_LUT, base + FSPI_FLSHB2CR2);
+
+	f->selected = -1;
 
 	return 0;
 }
@@ -885,7 +1191,7 @@ static int nxp_fspi_claim_bus(struct udevice *dev)
 {
 	struct nxp_fspi *f;
 	struct udevice *bus;
-	struct dm_spi_slave_platdata *slave_plat = dev_get_parent_platdata(dev);
+	struct dm_spi_slave_plat *slave_plat = dev_get_parent_plat(dev);
 
 	bus = dev->parent;
 	f = dev_get_priv(bus);
@@ -897,20 +1203,30 @@ static int nxp_fspi_claim_bus(struct udevice *dev)
 
 static int nxp_fspi_set_speed(struct udevice *bus, uint speed)
 {
-#if CONFIG_IS_ENABLED(CONFIG_CLK)
+	ulong rate;
 	struct nxp_fspi *f = dev_get_priv(bus);
+
+#if CONFIG_IS_ENABLED(CLK)
 	int ret;
 
 	nxp_fspi_clk_disable_unprep(f);
 
 	ret = clk_set_rate(&f->clk, speed);
-	if (ret)
+	if (ret < 0)
 		return ret;
 
 	ret = nxp_fspi_clk_prep_enable(f);
 	if (ret)
 		return ret;
 #endif
+
+	rate = nxp_fspi_get_speed(bus);
+	if (IS_ERR_VALUE(rate)) {
+		dev_err(bus, "failed to get rate\n");
+		return -EINVAL;
+	}
+	if (rate >= MHZ(100))
+		nxp_fspi_dll_calibration(f);
 	return 0;
 }
 
@@ -920,10 +1236,10 @@ static int nxp_fspi_set_mode(struct udevice *bus, uint mode)
 	return 0;
 }
 
-static int nxp_fspi_ofdata_to_platdata(struct udevice *bus)
+static int nxp_fspi_of_to_plat(struct udevice *bus)
 {
 	struct nxp_fspi *f = dev_get_priv(bus);
-#if CONFIG_IS_ENABLED(CONFIG_CLK)
+#if CONFIG_IS_ENABLED(CLK)
 	int ret;
 #endif
 
@@ -949,7 +1265,7 @@ static int nxp_fspi_ofdata_to_platdata(struct udevice *bus)
 	f->ahb_addr = map_physmem(ahb_addr, ahb_size, MAP_NOCACHE);
 	f->memmap_phy_size = ahb_size;
 
-#if CONFIG_IS_ENABLED(CONFIG_CLK)
+#if CONFIG_IS_ENABLED(CLK)
 	ret = clk_get_by_name(bus, "fspi_en", &f->clk_en);
 	if (ret) {
 		dev_err(bus, "failed to get fspi_en clock\n");
@@ -983,6 +1299,11 @@ static const struct dm_spi_ops nxp_fspi_ops = {
 
 static const struct udevice_id nxp_fspi_ids[] = {
 	{ .compatible = "nxp,lx2160a-fspi", .data = (ulong)&lx2160a_data, },
+	{ .compatible = "nxp,imx8mm-fspi", .data = (ulong)&imx8mm_data, },
+	{ .compatible = "nxp,imx8mp-fspi", .data = (ulong)&imx8mm_data, },
+	{ .compatible = "nxp,imx8qxp-fspi", .data = (ulong)&imx8qxp_data, },
+	{ .compatible = "nxp,imx8dxl-fspi", .data = (ulong)&imx8dxl_data, },
+	{ .compatible = "nxp,imx8ulp-fspi", .data = (ulong)&imx8ulp_data, },
 	{ }
 };
 
@@ -991,7 +1312,7 @@ U_BOOT_DRIVER(nxp_fspi) = {
 	.id	= UCLASS_SPI,
 	.of_match = nxp_fspi_ids,
 	.ops	= &nxp_fspi_ops,
-	.ofdata_to_platdata = nxp_fspi_ofdata_to_platdata,
-	.priv_auto_alloc_size = sizeof(struct nxp_fspi),
+	.of_to_plat = nxp_fspi_of_to_plat,
+	.priv_auto	= sizeof(struct nxp_fspi),
 	.probe	= nxp_fspi_probe,
 };

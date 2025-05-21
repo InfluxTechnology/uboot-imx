@@ -17,6 +17,9 @@
 #include <i2c.h>
 #include <asm/io.h>
 #include <usb.h>
+#include <imx_sip.h>
+#include <linux/arm-smccc.h>
+#include <linux/delay.h>
 
 #include "../common/ea_eeprom.h"
 #include "../common/ea_common.h"
@@ -78,7 +81,7 @@ static void setup_iomux_fec(void)
 
 	gpio_request(FEC_RST_PAD, "fec1_rst");
 	gpio_direction_output(FEC_RST_PAD, 0);
-	udelay(500);
+	udelay(10000);
 	gpio_direction_output(FEC_RST_PAD, 1);
 }
 
@@ -91,20 +94,23 @@ static int setup_fec(void)
 
 	/* Use 125M anatop REF_CLK1 for ENET1, not from external */
 	clrsetbits_le32(&iomuxc_gpr_regs->gpr[1],
-			IOMUXC_GPR_GPR1_GPR_ENET1_TX_CLK_SEL_MASK, 0);
+			IOMUXC_GPR_GPR1_GPR_ENET1_TX_CLK_SEL, 0);
 	return set_clk_enet(ENET_125MHZ);
 }
 
 int board_phy_config(struct phy_device *phydev)
 {
-	/* enable rgmii rxc skew and phy mode select to RGMII copper */
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x1f);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x8);
+	/* Initialization only for Atheros PHY */
+	if (phydev->phy_id == 0x4dd074) {
+		/* enable rgmii rxc skew and phy mode select to RGMII copper */
+		phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x1f);
+		phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x8);
 
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x00);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x82ee);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x05);
-	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x100);
+		phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x00);
+		phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x82ee);
+		phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x05);
+		phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x100);
+	}
 
 	if (phydev->drv->config)
 		phydev->drv->config(phydev);
@@ -134,19 +140,20 @@ int board_ehci_usb_phy_mode(struct udevice *dev)
 	return USB_INIT_DEVICE;
 }
 
-#define FSL_SIP_GPC			0xC2000000
-#define FSL_SIP_CONFIG_GPC_PM_DOMAIN	0x3
 #define DISPMIX				9
 #define MIPI 				10
 
 int board_init(void)
 {
+	struct arm_smccc_res res;
 #ifdef CONFIG_FEC_MXC
 	setup_fec();
 #endif
 
-	call_imx_sip(FSL_SIP_GPC, FSL_SIP_CONFIG_GPC_PM_DOMAIN, DISPMIX, true, 0);
-	call_imx_sip(FSL_SIP_GPC, FSL_SIP_CONFIG_GPC_PM_DOMAIN, MIPI, true, 0);
+	arm_smccc_smc(IMX_SIP_GPC, IMX_SIP_GPC_PM_DOMAIN,
+		      DISPMIX, true, 0, 0, 0, 0, &res);
+	arm_smccc_smc(IMX_SIP_GPC, IMX_SIP_GPC_PM_DOMAIN,
+		      MIPI, true, 0, 0, 0, 0, &res);
 
 	ea_print_board();
 
@@ -155,6 +162,8 @@ int board_init(void)
 
 int board_late_init(void)
 {
+	char* fdt_file;
+	int carrier_version;
 #ifdef CONFIG_ENV_IS_IN_MMC
 	board_late_mmc_env_init();
 #endif
@@ -170,8 +179,31 @@ int board_late_init(void)
 	}
 #endif
 
+	/*
+	 * Detect which carrier board being used and
+	 * choose device tree file.
+	 * This functionality can be overridden by setting
+	 * the fdt_file variable in the u-boot environment.
+	 */
+	fdt_file = env_get("fdt_file");
+	if (fdt_file == NULL || strlen(fdt_file) == 0) {
+		carrier_version = ea_get_carrier_board_version(1);
+		if (carrier_version == 3) {
+			fdt_file = "imx8mn-ea-ucom-kit_v3.dtb";
+		}
+		else if (carrier_version == 2) {
+			fdt_file = "imx8mn-ea-ucom-kit_v2.dtb";
+		}
+		else {
+			fdt_file = CONFIG_DEFAULT_FDT_FILE;
+		}
+
+		env_set("fdt_file", fdt_file);
+	}
+
 	ea_gpio_exp_configure(1);
 
+	ea_board_info_to_env();
 
 	return 0;
 }

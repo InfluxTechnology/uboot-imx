@@ -2,16 +2,14 @@
 /*
  * (C) Copyright 2009
  * Stefano Babic, DENX Software Engineering, sbabic@denx.de.
- * Copyright (C) 2015-2016 Freescale Semiconductor, Inc.
- * Copyright 2018 NXP
  */
 
 #ifndef __SYS_PROTO_IMX6_
 #define __SYS_PROTO_IMX6_
 
+#include <asm/gpio.h>
 #include <asm/mach-imx/sys_proto.h>
 #include <asm/arch/iomux.h>
-#include <asm/arch/module_fuse.h>
 
 #define USBPHY_PWD		0x00000000
 
@@ -19,9 +17,6 @@
 
 #define is_usbotg_phy_active(void) (!(readl(USB_PHY0_BASE_ADDR + USBPHY_PWD) & \
 				   USBPHY_PWD_RXPWDRX))
-
-int imx6_pcie_toggle_power(void);
-int imx6_pcie_toggle_reset(void);
 
 enum ldo_reg {
 	LDO_ARM,

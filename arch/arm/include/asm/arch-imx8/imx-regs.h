@@ -1,10 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
- * Copyright 2018 NXP
+ * Copyright 2018, 2021 NXP
  */
 
 #ifndef __ASM_ARCH_IMX8_REGS_H__
 #define __ASM_ARCH_IMX8_REGS_H__
+
+#include <asm/mach-imx/regs-lcdif.h>
 
 #define ARCH_MXC
 
@@ -26,6 +28,8 @@
 #define LPI2C4_BASE_ADDR	0x5A830000
 #define LPI2C5_BASE_ADDR	0x5A840000
 
+#define FEC_QUIRK_ENET_MAC
+
 #ifdef CONFIG_IMX8QXP
 #define LVDS0_PHYCTRL_BASE	0x56221000
 #define LVDS1_PHYCTRL_BASE	0x56241000
@@ -38,6 +42,7 @@
 #define LVDS1_PHYCTRL_BASE 0x57241000
 #define MIPI0_SS_BASE 0x56220000
 #define MIPI1_SS_BASE 0x57220000
+#define SMMU_BASE 0x51400000
 #endif
 
 #define APBH_DMA_ARB_BASE_ADDR	0x5B810000
@@ -53,8 +58,8 @@
 #define USB_PHY0_BASE_ADDR	0x5b100000
 #define USB_PHY1_BASE_ADDR	0x5b110000
 
-#define CAAM_ARB_BASE_ADDR	(0x31800000)
-#define CONFIG_SYS_FSL_SEC_ADDR (0x31400000)
+#define CAAM_ARB_BASE_ADDR      (0x31800000)
+#define CFG_SYS_FSL_SEC_ADDR (0x31400000)
 
 #if !(defined(__KERNEL_STRICT_NAMES) || defined(__ASSEMBLY__))
 #include <asm/types.h>

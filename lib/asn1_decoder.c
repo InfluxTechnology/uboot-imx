@@ -6,7 +6,9 @@
  */
 
 #ifdef __UBOOT__
+#include <log.h>
 #include <linux/compat.h>
+#include <linux/printk.h>
 #else
 #include <linux/export.h>
 #endif

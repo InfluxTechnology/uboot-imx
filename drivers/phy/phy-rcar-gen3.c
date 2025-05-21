@@ -17,6 +17,7 @@
 #include <usb.h>
 #include <asm/io.h>
 #include <linux/bitops.h>
+#include <linux/printk.h>
 #include <power/regulator.h>
 
 /* USB2.0 Host registers (original offset is +0x200) */
@@ -141,7 +142,6 @@ static int rcar_gen3_phy_remove(struct udevice *dev)
 	struct rcar_gen3_phy *priv = dev_get_priv(dev);
 
 	clk_disable(&priv->clk);
-	clk_free(&priv->clk);
 
 	return 0;
 }
@@ -158,5 +158,5 @@ U_BOOT_DRIVER(rcar_gen3_phy) = {
 	.ops		= &rcar_gen3_phy_phy_ops,
 	.probe		= rcar_gen3_phy_probe,
 	.remove		= rcar_gen3_phy_remove,
-	.priv_auto_alloc_size = sizeof(struct rcar_gen3_phy),
+	.priv_auto	= sizeof(struct rcar_gen3_phy),
 };

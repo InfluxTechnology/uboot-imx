@@ -2,7 +2,7 @@
 /*
  * AM654: DDRSS Register definitions and structures.
  *
- * Copyright (C) 2018 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2018 Texas Instruments Incorporated - https://www.ti.com/
  *	Lokesh Vutla <lokeshvutla@ti.com>
  *
  */
@@ -11,6 +11,7 @@
 #define __K3_AM654_DDRSS_H
 
 /* DDRSS subsystem wrapper logic registers */
+#include <linux/bitops.h>
 #define DDRSS_SS_ID_REV_REG		0x00000000
 #define DDRSS_SS_CTL_REG		0x00000004
 #define DDRSS_V2H_CTL_REG		0x00000020

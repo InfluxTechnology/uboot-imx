@@ -13,7 +13,7 @@ static void l2c310_of_parse_and_init(struct udevice *dev)
 {
 	u32 tag[3] = { 0, 0, 0 };
 	u32 saved_reg, prefetch;
-	struct pl310_regs *regs = (struct pl310_regs *)dev_read_addr(dev);
+	struct pl310_regs *regs = dev_read_addr_ptr(dev);
 
 	/* Disable the L2 Cache */
 	clrbits_le32(&regs->pl310_ctrl, L2X0_CTRL_EN);
@@ -33,7 +33,9 @@ static void l2c310_of_parse_and_init(struct udevice *dev)
 			saved_reg &= ~L310_AUX_CTRL_INST_PREFETCH_MASK;
 	}
 
-	saved_reg |= dev_read_bool(dev, "arm,shared-override");
+	if (dev_read_bool(dev, "arm,shared-override"))
+		saved_reg |= L310_SHARED_ATT_OVERRIDE_ENABLE;
+
 	writel(saved_reg, &regs->pl310_aux_ctrl);
 
 	saved_reg = readl(&regs->pl310_tag_latency_ctrl);

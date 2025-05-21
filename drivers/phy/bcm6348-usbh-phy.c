@@ -11,10 +11,12 @@
 #include <clk.h>
 #include <dm.h>
 #include <generic-phy.h>
+#include <log.h>
 #include <malloc.h>
 #include <reset.h>
 #include <asm/io.h>
 #include <dm/device.h>
+#include <linux/bitops.h>
 
 #define USBH_SETUP_PORT1_EN	BIT(0)
 
@@ -60,10 +62,6 @@ static int bcm6348_usbh_probe(struct udevice *dev)
 	if (ret < 0)
 		return ret;
 
-	ret = clk_free(&clk);
-	if (ret < 0)
-		return ret;
-
 	/* perform reset */
 	ret = reset_get_by_index(dev, 0, &rst_ctl);
 	if (ret < 0)
@@ -85,6 +83,6 @@ U_BOOT_DRIVER(bcm6348_usbh) = {
 	.id = UCLASS_PHY,
 	.of_match = bcm6348_usbh_ids,
 	.ops = &bcm6348_usbh_ops,
-	.priv_auto_alloc_size = sizeof(struct bcm6348_usbh_priv),
+	.priv_auto	= sizeof(struct bcm6348_usbh_priv),
 	.probe = bcm6348_usbh_probe,
 };

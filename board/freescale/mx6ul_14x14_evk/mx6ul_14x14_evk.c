@@ -4,6 +4,7 @@
  */
 
 #include <init.h>
+#include <net.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/iomux.h>
 #include <asm/arch/imx-regs.h>
@@ -11,16 +12,19 @@
 #include <asm/arch/mx6ul_pins.h>
 #include <asm/arch/mx6-pins.h>
 #include <asm/arch/sys_proto.h>
+#include <asm/global_data.h>
 #include <asm/gpio.h>
 #include <asm/mach-imx/iomux-v3.h>
 #include <asm/mach-imx/boot_mode.h>
 #include <asm/mach-imx/mxc_i2c.h>
 #include <asm/io.h>
+#include <asm/sections.h>
 #include <common.h>
 #include <env.h>
 #include <fsl_esdhc_imx.h>
 #include <i2c.h>
 #include <miiphy.h>
+#include <linux/delay.h>
 #include <linux/sizes.h>
 #include <mmc.h>
 #include <netdev.h>
@@ -187,7 +191,7 @@ int board_mmc_getcd(struct mmc *mmc)
 	return 1;
 }
 
-int board_mmc_init(bd_t *bis)
+int board_mmc_init(struct bd_info *bis)
 {
 	imx_iomux_v3_setup_multiple_pads(usdhc2_pads, ARRAY_SIZE(usdhc2_pads));
 	usdhc_cfg[0].sdhc_clk = mxc_get_clock(MXC_ESDHC2_CLK);
@@ -291,7 +295,7 @@ static int setup_fec(void)
 	 * Use 50M anatop loopback REF_CLK2 for ENET2,
 	 * clear gpr1[14], set gpr1[18].
 	 */
-	if (!check_module_fused(MX6_MODULE_ENET2)) {
+	if (!check_module_fused(MODULE_ENET2)) {
 		clrsetbits_le32(&iomuxc_regs->gpr[1], IOMUX_GPR1_FEC2_MASK,
 				IOMUX_GPR1_FEC2_CLOCK_MUX1_SEL_MASK);
 	}
@@ -300,7 +304,7 @@ static int setup_fec(void)
 	if (ret)
 		return ret;
 
-	if (!check_module_fused(MX6_MODULE_ENET2)) {
+	if (!check_module_fused(MODULE_ENET2)) {
 		ret = enable_fec_anatop_clock(1, ENET_50MHZ);
 		if (ret)
 			return ret;
@@ -322,7 +326,7 @@ int board_phy_config(struct phy_device *phydev)
 }
 #endif
 
-#ifdef CONFIG_DM_VIDEO
+#ifdef CONFIG_VIDEO
 static iomux_v3_cfg_t const lcd_pads[] = {
 	/* Use GPIO for Brightness adjustment, duty cycle = period. */
 	MX6_PAD_GPIO1_IO08__GPIO1_IO08 | MUX_PAD_CTRL(NO_PAD_CTRL),
@@ -441,6 +445,13 @@ void board_preboot_os(void)
 {
 	gpio_set_value(IMX_GPIO_NR(1, 8), 0);
 	gpio_set_value(IMX_GPIO_NR(5, 9), 0);
+}
+
+void board_quiesce_devices(void)
+{
+#if defined(CONFIG_VIDEO_MXS)
+	enable_lcdif_clock(LCDIF1_BASE_ADDR, 0);
+#endif
 }
 
 #ifdef CONFIG_SPL_BUILD

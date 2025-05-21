@@ -144,6 +144,11 @@ Command Reference
 
   "powerdown"          Power off the device.
 
+  "ucmd"               execute any bootloader command and wait until it
+                       finishs.
+
+  "acmd"               execute any bootloader command, do not wait.
+
 Client Variables
 ----------------
 
@@ -167,6 +172,9 @@ The various currently defined names are::
   secure              If the value is "yes", this is a secure
                       bootloader requiring a signature before
                       it will install or boot images.
+
+  all                 Provides all info from commands above as
+                      they were called one by one
 
 Names starting with a lowercase character are reserved by this
 specification.  OEM-specific names should not start with lowercase

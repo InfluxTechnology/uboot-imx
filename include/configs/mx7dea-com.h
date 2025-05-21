@@ -12,14 +12,11 @@
 
 #include "mx7_common.h"
 
-#ifdef CONFIG_SPL
-#include "imx7_spl.h"
+#if defined(CONFIG_SPL_BUILD)
+#undef CONFIG_DM_I2C
 #endif
 
-#define CONFIG_MXC_UART_BASE            UART1_IPS_BASE_ADDR
-
-/* Size of malloc() pool */
-#define CONFIG_SYS_MALLOC_LEN           (32 * SZ_1M)
+#define CFG_MXC_UART_BASE            UART1_IPS_BASE_ADDR
 
 #ifdef CONFIG_IMX_BOOTAUX
 /* Set to QSPI1 A flash at default */
@@ -56,7 +53,7 @@
 #define UPDATE_M4_ENV ""
 #endif
 
-#define CONFIG_MFG_ENV_SETTINGS_DEFAULT \
+#define CFG_MFG_ENV_SETTINGS_DEFAULT \
         "mfgtool_args=setenv bootargs console=${console},${baudrate} " \
                 "rdinit=/linuxrc " \
                 "clk_ignore_unused "\
@@ -73,8 +70,8 @@
             "echo \"Run fastboot ...\"; fastboot 0; "  \
         "fi;\0"\
 
-#define CONFIG_MFG_ENV_SETTINGS \
-	CONFIG_MFG_ENV_SETTINGS_DEFAULT \
+#define CFG_MFG_ENV_SETTINGS \
+	CFG_MFG_ENV_SETTINGS_DEFAULT \
 	"initrd_addr=0x83800000\0" \
 	"initrd_high=0xffffffff\0" \
 	"emmc_dev="__stringify(CONFIG_SYS_MMC_ENV_DEV)"\0"\
@@ -85,7 +82,7 @@
 #define EA_IMX_PTP_ENV_SETTINGS ""
 #endif
 
-#define CONFIG_DFU_ENV_SETTINGS \
+#define CFG_DFU_ENV_SETTINGS \
 	"dfu_alt_info=image raw 0 0x800000;"\
 		"u-boot raw 0 0x4000;"\
 		"bootimg part 0 1;"\
@@ -97,11 +94,11 @@
 #define FDT_FILE "imx7dea-ucom-kit_v2.dtb"
 #endif
 
-#define CONFIG_EXTRA_ENV_SETTINGS \
+#define CFG_EXTRA_ENV_SETTINGS \
 	EA_IMX_PTP_ENV_SETTINGS \
 	UPDATE_M4_ENV \
-	CONFIG_MFG_ENV_SETTINGS \
-	CONFIG_DFU_ENV_SETTINGS \
+	CFG_MFG_ENV_SETTINGS \
+	CFG_DFU_ENV_SETTINGS \
 	"script=boot.scr\0" \
 	"image=zImage\0" \
 	"console=ttymxc0\0" \
@@ -179,27 +176,17 @@
 	   "else run netboot; fi"
 
 /* Miscellaneous configurable options */
-#define CONFIG_SYS_MEMTEST_START	0x80000000
-#define CONFIG_SYS_MEMTEST_END		(CONFIG_SYS_MEMTEST_START + 0x10000)
-
-#define CONFIG_SYS_LOAD_ADDR            CONFIG_LOADADDR
 #define CONFIG_SYS_HZ                   1000
 
 /* Physical Memory Map */
 #define PHYS_SDRAM			MMDC0_ARB_BASE_ADDR
 #define PHYS_SDRAM_SIZE			SZ_1G
 
-#define CONFIG_SYS_SDRAM_BASE		PHYS_SDRAM
-#define CONFIG_SYS_INIT_RAM_ADDR	IRAM_BASE_ADDR
-#define CONFIG_SYS_INIT_RAM_SIZE	IRAM_SIZE
-
-#define CONFIG_SYS_INIT_SP_OFFSET \
-	(CONFIG_SYS_INIT_RAM_SIZE - GENERATED_GBL_DATA_SIZE)
-#define CONFIG_SYS_INIT_SP_ADDR \
-	(CONFIG_SYS_INIT_RAM_ADDR + CONFIG_SYS_INIT_SP_OFFSET)
+#define CFG_SYS_SDRAM_BASE	PHYS_SDRAM
+#define CFG_SYS_INIT_RAM_ADDR	IRAM_BASE_ADDR
+#define CFG_SYS_INIT_RAM_SIZE	IRAM_SIZE
 
 #ifdef CONFIG_FSL_QSPI
-#define CONFIG_SYS_FSL_QSPI_AHB
 #define FSL_QSPI_FLASH_NUM              1
 #define FSL_QSPI_FLASH_SIZE             SZ_32M
 #define QSPI0_BASE_ADDR                 QSPI1_IPS_BASE_ADDR
@@ -209,48 +196,47 @@
 
 
 /* MMC Configuration */
-#define CONFIG_SYS_FSL_USDHC_NUM	2
-#define CONFIG_SYS_MMC_ENV_DEV		2  /* USDHC3/eMMC */
-#define CONFIG_SYS_MMC_ENV_PART		1  /* 0=user area, 1=1st MMC boot part., 2=2nd MMC boot part. */
+#define CFG_SYS_FSL_USDHC_NUM	2
 #define CONFIG_MMCROOT			"/dev/mmcblk2p2"  /* USDHC3/eMMC */
 
-#define CONFIG_SYS_FSL_ESDHC_ADDR	0
+#define CFG_SYS_FSL_ESDHC_ADDR	0
 
 /* I2C Configs */
 #ifndef CONFIG_DM_I2C
 #define CONFIG_SYS_I2C
 #define CONFIG_SYS_I2C_MXC_I2C1		/* enable I2C bus 1 */
 #define CONFIG_SYS_I2C_MXC_I2C2		/* enable I2C bus 2 */
+#define CONFIG_SYS_MXC_I2C1_SPEED	100000
+#define CONFIG_SYS_MXC_I2C2_SPEED	100000
+#define CONFIG_SYS_MXC_I2C1_SLAVE	0
+#define CONFIG_SYS_MXC_I2C2_SLAVE	0
 #endif
-#define CONFIG_SYS_I2C_MXC
-#define CONFIG_SYS_I2C_SPEED		  100000
 
 /* Network */
 
 #ifdef CONFIG_DM_ETH
-
+/*
 #define IMX_FEC_BASE			ENET_IPS_BASE_ADDR
 #define CONFIG_FEC_MXC_PHYADDR          0x1
 
 #define CONFIG_FEC_XCV_TYPE             RGMII
 #define CONFIG_ETHPRIME                 "eth0"
-
+*/
 #endif
 
 /* USB Configs */
 #define CONFIG_MXC_USB_PORTSC  (PORT_PTS_UTMI | PORT_PTS_PTW)
 
-#ifdef CONFIG_VIDEO
-#define CONFIG_VIDEO_MXS
-#define CONFIG_VIDEO_LOGO
-#define CONFIG_SPLASH_SCREEN
-#define CONFIG_SPLASH_SCREEN_ALIGN
-#define CONFIG_BMP_16BPP
-#define CONFIG_VIDEO_BMP_RLE8
-#define CONFIG_VIDEO_BMP_LOGO
+#ifdef CONFIG_DM_VIDEO
+#define CONFIG_VIDEO_LINK
 #endif
 
-#define EA_SHARED_CONFIG_MEM (CONFIG_SYS_SPL_MALLOC_START + CONFIG_SYS_SPL_MALLOC_SIZE)
+#ifdef CONFIG_VIDEO
+#define CONFIG_SPLASH_SCREEN
+#define CONFIG_SPLASH_SCREEN_ALIGN
+#endif
+
+#define EA_SHARED_CONFIG_MEM (CONFIG_SPL_CUSTOM_SYS_MALLOC_ADDR + CONFIG_SPL_SYS_MALLOC_SIZE)
 
 
 #endif				/* __CONFIG_H */

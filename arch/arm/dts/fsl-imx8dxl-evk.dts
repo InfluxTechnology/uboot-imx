@@ -66,7 +66,7 @@
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
 			regulator-name = "epdev_on";
-			gpio = 	<&pca6416_a 12 GPIO_ACTIVE_HIGH>;
+			gpio = 	<&pca6416_a 13 GPIO_ACTIVE_HIGH>;
 			enable-active-high;
 
 		};
@@ -76,7 +76,7 @@
 			regulator-min-microvolt = <0000000>;
 			regulator-max-microvolt = <3300000>;
 			regulator-name = "clk_ext_sel";
-			gpio = <&pca6416_a 10 GPIO_ACTIVE_LOW>;
+			gpio = <&pca6416_a 10 GPIO_ACTIVE_HIGH>;
 			regulator-always-on;
 		};
 
@@ -155,6 +155,16 @@
 			fsl,pins = <
 				SC_P_SPI1_SDI_ADMA_I2C3_SCL	0x06000021
 				SC_P_SPI1_CS0_ADMA_I2C3_SDA	0x06000021
+			>;
+		};
+
+		pinctrl_lpspi3: lpspi3grp {
+			fsl,pins = <
+				SC_P_SPI3_SCK_ADMA_SPI3_SCK	0x0600004c
+				SC_P_SPI3_SDO_ADMA_SPI3_SDO	0x0600004c
+				SC_P_SPI3_SDI_ADMA_SPI3_SDI	0x0600004c
+				SC_P_SPI3_CS1_ADMA_SPI3_CS1	0x0600004c
+				SC_P_SPI3_CS0_LSIO_GPIO0_IO16	0x21
 			>;
 		};
 
@@ -277,7 +287,7 @@
 };
 
 &A35_0 {
-	u-boot,dm-pre-reloc;
+	bootph-all;
 };
 
 &lpuart0 {
@@ -286,11 +296,25 @@
 	status = "okay";
 };
 
+&gpio0 {
+	status = "okay";
+};
+
 &gpio4 {
 	status = "okay";
 };
 
 &gpio5 {
+	status = "okay";
+};
+
+&lpspi3 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_lpspi3>;
+	cs-gpios = <&gpio0 16 GPIO_ACTIVE_LOW>, <0>, <0>, <0>;
+	spi-max-frequency = <1000000>;
 	status = "okay";
 };
 
@@ -369,7 +393,7 @@
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_lpi2c3>;
-	status = "okay";
+	status = "disabled";
 
 	i2cswitch@70 {
 		compatible = "nxp,pca9646";
@@ -420,15 +444,17 @@
 &flexspi0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_flexspi0>;
+	nxp,fspi-dll-slvdly = <4>;
 	status = "okay";
 
 	flash0: mt35xu512aba@0 {
 		reg = <0>;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		compatible = "spi-flash";
-		spi-max-frequency = <29000000>;
-		spi-nor,ddr-quad-read-dummy = <8>;
+		compatible = "jedec,spi-nor";
+		spi-max-frequency = <133000000>;
+		spi-tx-bus-width = <8>;
+		spi-rx-bus-width = <8>;
 	};
 };
 
@@ -451,6 +477,7 @@
 	cd-gpios = <&gpio5 1 GPIO_ACTIVE_LOW>;
 	wp-gpios = <&gpio5 0 GPIO_ACTIVE_HIGH>;
 	vmmc-supply = <&reg_usdhc2_vmmc>;
+	max-frequency = <100000000>;
 	status = "okay";
 };
 
@@ -462,10 +489,6 @@
 	fsl,ar8031-phy-fixup;
 	fsl,magic-packet;
 	status = "okay";
-
-	phy-reset-gpios = <&pca6416_a 2 GPIO_ACTIVE_LOW>;
-	phy-reset-duration = <10>;
-	phy-reset-post-delay = <150>;
 
 	mdio {
 		#address-cells = <1>;
@@ -480,14 +503,13 @@
 };
 
 &pcieb{
-	ext_osc = <1>;
+	ext_osc = <0>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pcieb>;
 	clkreq-gpio = <&gpio4 1 GPIO_ACTIVE_LOW>;
-	power-on-gpio = <&pca6416_a 10 GPIO_ACTIVE_LOW>;
+	power-on-gpio = <&pca6416_a 12 GPIO_ACTIVE_HIGH>;
 	reset-gpio = <&gpio4 0 GPIO_ACTIVE_LOW>;
-	enable-gpios = <&pca6416_a 10 GPIO_ACTIVE_LOW>;
-	epdev_on-supply = <&epdev_on>;
+	epdev_on = <&epdev_on>;
 	status = "okay";
 };
 
@@ -522,6 +544,7 @@
 
 &usbotg1 {
 	vbus-supply = <&reg_usb_otg1_vbus>;
+	dr_mode = "otg";
 	srp-disable;
 	hnp-disable;
 	adp-disable;
@@ -532,6 +555,7 @@
 
 &usbotg2 {
 	vbus-supply = <&reg_usb_otg2_vbus>;
+	dr_mode = "otg";
 	srp-disable;
 	hnp-disable;
 	adp-disable;

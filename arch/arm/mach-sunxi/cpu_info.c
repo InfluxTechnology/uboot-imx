@@ -5,7 +5,7 @@
  * Tom Cubie <tangliang@allwinnertech.com>
  */
 
-#include <common.h>
+#include <init.h>
 #include <asm/io.h>
 #include <asm/arch/cpu.h>
 #include <asm/arch/clock.h>
@@ -56,6 +56,8 @@ int print_cpuinfo(void)
 {
 #ifdef CONFIG_MACH_SUN4I
 	puts("CPU:   Allwinner A10 (SUN4I)\n");
+#elif defined CONFIG_MACH_SUNIV
+	puts("CPU:   Allwinner F Series (SUNIV)\n");
 #elif defined CONFIG_MACH_SUN5I
 	u32 val = readl(SUNXI_SID_BASE + 0x08);
 	switch ((val >> 12) & 0xf) {
@@ -90,6 +92,8 @@ int print_cpuinfo(void)
 	printf("CPU:   Allwinner R40 (SUN8I %04x)\n", sunxi_get_sram_id());
 #elif defined CONFIG_MACH_SUN8I_V3S
 	printf("CPU:   Allwinner V3s (SUN8I %04x)\n", sunxi_get_sram_id());
+#elif defined CONFIG_MACH_SUN8I_R528
+	puts("CPU:   Allwinner R528 (SUN8I)\n");
 #elif defined CONFIG_MACH_SUN9I
 	puts("CPU:   Allwinner A80 (SUN9I)\n");
 #elif defined CONFIG_MACH_SUN50I
@@ -98,6 +102,8 @@ int print_cpuinfo(void)
 	puts("CPU:   Allwinner H5 (SUN50I)\n");
 #elif defined CONFIG_MACH_SUN50I_H6
 	puts("CPU:   Allwinner H6 (SUN50I)\n");
+#elif defined CONFIG_MACH_SUN50I_H616
+	puts("CPU:   Allwinner H616 (SUN50I)\n");
 #else
 #warning Please update cpu_info.c with correct CPU information
 	puts("CPU:   SUNXI Family\n");

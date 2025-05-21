@@ -10,10 +10,13 @@
 #include <common.h>
 #include <dm.h>
 #include <errno.h>
+#include <log.h>
 #include <mmc.h>
 #include <asm/gpio.h>
 #include <asm/io.h>
 #include <asm/arch-tegra/tegra_mmc.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
 #include <linux/err.h>
 #if defined(CONFIG_TEGRA30) || defined(CONFIG_TEGRA210)
 #include <asm/arch/clock.h>
@@ -34,6 +37,9 @@ struct tegra_mmc_priv {
 	unsigned int version;	/* SDHCI spec. version */
 	unsigned int clock;	/* Current clock (MHz) */
 	int mmc_id;		/* peripheral id */
+
+	int tap_value;
+	int trim_value;
 };
 
 static void tegra_mmc_set_power(struct tegra_mmc_priv *priv,
@@ -523,31 +529,6 @@ static void tegra_mmc_pad_init(struct tegra_mmc_priv *priv)
 		printf("%s: Warning: Autocal timed out!\n", __func__);
 		/* TBD: Set CFG2TMC_SDMMC1_PAD_CAL_DRV* regs here */
 	}
-
-#if defined(CONFIG_TEGRA210)
-	u32 tap_value, trim_value;
-
-	/* Set tap/trim values for SDMMC1/3 @ <48MHz here */
-	val = readl(&priv->reg->venspictl);	/* aka VENDOR_SYS_SW_CNTL */
-	val &= IO_TRIM_BYPASS_MASK;
-	if (id == PERIPH_ID_SDMMC1) {
-		tap_value = 4;			/* default */
-		if (val)
-			tap_value = 3;
-		trim_value = 2;
-	} else {				/* SDMMC3 */
-		tap_value = 3;
-		trim_value = 3;
-	}
-
-	val = readl(&priv->reg->venclkctl);
-	val &= ~TRIM_VAL_MASK;
-	val |= (trim_value << TRIM_VAL_SHIFT);
-	val &= ~TAP_VAL_MASK;
-	val |= (tap_value << TAP_VAL_SHIFT);
-	writel(val, &priv->reg->venclkctl);
-	debug("%s: VENDOR_CLOCK_CNTRL = 0x%08X\n", __func__, val);
-#endif	/* T210 */
 #endif	/* T30/T210 */
 }
 
@@ -585,6 +566,22 @@ static void tegra_mmc_reset(struct tegra_mmc_priv *priv, struct mmc *mmc)
 
 	/* Make sure SDIO pads are set up */
 	tegra_mmc_pad_init(priv);
+
+	if (!IS_ERR_VALUE(priv->tap_value) ||
+	    !IS_ERR_VALUE(priv->trim_value)) {
+		u32 val;
+
+		val = readl(&priv->reg->venclkctl);
+
+		val &= ~TRIM_VAL_MASK;
+		val |= (priv->trim_value << TRIM_VAL_SHIFT);
+
+		val &= ~TAP_VAL_MASK;
+		val |= (priv->tap_value << TAP_VAL_SHIFT);
+
+		writel(val, &priv->reg->venclkctl);
+		debug("%s: VENDOR_CLOCK_CNTRL = 0x%08X\n", __func__, val);
+	}
 }
 
 static int tegra_mmc_init(struct udevice *dev)
@@ -677,7 +674,7 @@ static const struct dm_mmc_ops tegra_mmc_ops = {
 static int tegra_mmc_probe(struct udevice *dev)
 {
 	struct mmc_uclass_priv *upriv = dev_get_uclass_priv(dev);
-	struct tegra_mmc_plat *plat = dev_get_platdata(dev);
+	struct tegra_mmc_plat *plat = dev_get_plat(dev);
 	struct tegra_mmc_priv *priv = dev_get_priv(dev);
 	struct mmc_config *cfg = &plat->cfg;
 	int bus_width, ret;
@@ -701,11 +698,11 @@ static int tegra_mmc_probe(struct udevice *dev)
 	 *  (actually 52MHz)
 	 */
 	cfg->f_min = 375000;
-	cfg->f_max = 48000000;
+	cfg->f_max = dev_read_u32_default(dev, "max-frequency", 48000000);
 
 	cfg->b_max = CONFIG_SYS_MMC_MAX_BLK_COUNT;
 
-	priv->reg = (void *)dev_read_addr(dev);
+	priv->reg = dev_read_addr_ptr(dev);
 
 	ret = reset_get_by_name(dev, "sdhci", &priv->reset_ctl);
 	if (ret) {
@@ -739,6 +736,14 @@ static int tegra_mmc_probe(struct udevice *dev)
 	if (dm_gpio_is_valid(&priv->pwr_gpio))
 		dm_gpio_set_value(&priv->pwr_gpio, 1);
 
+	ret = dev_read_u32(dev, "nvidia,default-tap", &priv->tap_value);
+	if (ret)
+		priv->tap_value = ret;
+
+	ret = dev_read_u32(dev, "nvidia,default-trim", &priv->trim_value);
+	if (ret)
+		priv->trim_value = ret;
+
 	upriv->mmc = &plat->mmc;
 
 	return tegra_mmc_init(dev);
@@ -746,7 +751,7 @@ static int tegra_mmc_probe(struct udevice *dev)
 
 static int tegra_mmc_bind(struct udevice *dev)
 {
-	struct tegra_mmc_plat *plat = dev_get_platdata(dev);
+	struct tegra_mmc_plat *plat = dev_get_plat(dev);
 
 	return mmc_bind(dev, &plat->mmc, &plat->cfg);
 }
@@ -768,6 +773,6 @@ U_BOOT_DRIVER(tegra_mmc_drv) = {
 	.bind		= tegra_mmc_bind,
 	.probe		= tegra_mmc_probe,
 	.ops		= &tegra_mmc_ops,
-	.platdata_auto_alloc_size = sizeof(struct tegra_mmc_plat),
-	.priv_auto_alloc_size = sizeof(struct tegra_mmc_priv),
+	.plat_auto	= sizeof(struct tegra_mmc_plat),
+	.priv_auto	= sizeof(struct tegra_mmc_priv),
 };

@@ -3,7 +3,6 @@
  * Copyright (C) 2016 Masahiro Yamada <yamada.masahiro@socionext.com>
  */
 
-#include <common.h>
 #include <debug_uart.h>
 #include <linux/io.h>
 #include <linux/serial_reg.h>
@@ -19,7 +18,7 @@
 
 static void _debug_uart_putc(int c)
 {
-	void __iomem *base = (void __iomem *)CONFIG_DEBUG_UART_BASE;
+	void __iomem *base = (void __iomem *)CONFIG_VAL(DEBUG_UART_BASE);
 
 	while (!(readl(base + UNIPHIER_UART_LSR) & UART_LSR_THRE))
 		;
@@ -58,7 +57,7 @@ void sg_set_iectrl(unsigned int pin)
 void _debug_uart_init(void)
 {
 #ifdef CONFIG_SPL_BUILD
-	void __iomem *base = (void __iomem *)CONFIG_DEBUG_UART_BASE;
+	void __iomem *base = (void __iomem *)CONFIG_VAL(DEBUG_UART_BASE);
 	unsigned int divisor;
 
 	switch (uniphier_get_soc_id()) {

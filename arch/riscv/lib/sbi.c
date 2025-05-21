@@ -7,12 +7,9 @@
  * Taken from Linux arch/riscv/kernel/sbi.c
  */
 
-#include <common.h>
+#include <errno.h>
 #include <asm/encoding.h>
 #include <asm/sbi.h>
-
-/* default SBI version is 0.1 */
-unsigned long sbi_spec_version = SBI_SPEC_VERSION_DEFAULT;
 
 struct sbiret sbi_ecall(int ext, int fid, unsigned long arg0,
 			unsigned long arg1, unsigned long arg2,
@@ -37,6 +34,190 @@ struct sbiret sbi_ecall(int ext, int fid, unsigned long arg0,
 	ret.value = a1;
 
 	return ret;
+}
+
+/**
+ * sbi_set_timer() - Program the timer for next timer event.
+ * @stime_value: The value after which next timer event should fire.
+ *
+ * Return: None
+ */
+void sbi_set_timer(uint64_t stime_value)
+{
+#if __riscv_xlen == 32
+	sbi_ecall(SBI_EXT_SET_TIMER, SBI_FID_SET_TIMER, stime_value,
+		  stime_value >> 32, 0, 0, 0, 0);
+#else
+	sbi_ecall(SBI_EXT_SET_TIMER, SBI_FID_SET_TIMER, stime_value,
+		  0, 0, 0, 0, 0);
+#endif
+}
+
+/**
+ * sbi_get_spec_version() - get current SBI specification version
+ *
+ * Return: version id
+ */
+long sbi_get_spec_version(void)
+{
+	struct sbiret ret;
+
+	ret = sbi_ecall(SBI_EXT_BASE, SBI_EXT_BASE_GET_SPEC_VERSION,
+			0, 0, 0, 0, 0, 0);
+	if (!ret.error)
+		if (ret.value)
+			return ret.value;
+
+	return -ENOTSUPP;
+}
+
+/**
+ * sbi_get_impl_id() - get SBI implementation ID
+ *
+ * Return: implementation ID
+ */
+int sbi_get_impl_id(void)
+{
+	struct sbiret ret;
+
+	ret = sbi_ecall(SBI_EXT_BASE, SBI_EXT_BASE_GET_IMP_ID,
+			0, 0, 0, 0, 0, 0);
+	if (!ret.error)
+		if (ret.value)
+			return ret.value;
+
+	return -ENOTSUPP;
+}
+
+/**
+ * sbi_get_impl_version() - get SBI implementation version
+ *
+ * @version:	pointer to receive version
+ * Return:	0 on success, -ENOTSUPP otherwise
+ */
+int sbi_get_impl_version(long *version)
+{
+	struct sbiret ret;
+
+	ret = sbi_ecall(SBI_EXT_BASE, SBI_EXT_BASE_GET_IMP_VERSION,
+			0, 0, 0, 0, 0, 0);
+	if (ret.error)
+		return -ENOTSUPP;
+	if (version)
+		*version = ret.value;
+	return 0;
+}
+
+/**
+ * sbi_probe_extension() - Check if an SBI extension ID is supported or not.
+ * @extid: The extension ID to be probed.
+ *
+ * Return: Extension specific nonzero value f yes, -ENOTSUPP otherwise.
+ */
+int sbi_probe_extension(int extid)
+{
+	struct sbiret ret;
+
+	ret = sbi_ecall(SBI_EXT_BASE, SBI_EXT_BASE_PROBE_EXT, extid,
+			0, 0, 0, 0, 0);
+	if (!ret.error)
+		if (ret.value)
+			return ret.value;
+
+	return -ENOTSUPP;
+}
+
+/**
+ * sbi_get_mvendorid() - get machine vendor ID
+ *
+ * @mimpid:	on return machine vendor ID
+ * Return:	0 on success
+ */
+int sbi_get_mvendorid(long *mvendorid)
+{
+	struct sbiret ret;
+
+	ret = sbi_ecall(SBI_EXT_BASE, SBI_EXT_BASE_GET_MVENDORID,
+			0, 0, 0, 0, 0, 0);
+	if (ret.error)
+		return -ENOTSUPP;
+
+	if (mvendorid)
+		*mvendorid = ret.value;
+
+	return 0;
+}
+
+/**
+ * sbi_get_marchid() - get machine architecture ID
+ *
+ * @mimpid:	on return machine architecture ID
+ * Return:	0 on success
+ */
+int sbi_get_marchid(long *marchid)
+{
+	struct sbiret ret;
+
+	ret = sbi_ecall(SBI_EXT_BASE, SBI_EXT_BASE_GET_MARCHID,
+			0, 0, 0, 0, 0, 0);
+
+	if (ret.error)
+		return -ENOTSUPP;
+
+	if (marchid)
+		*marchid = ret.value;
+
+	return 0;
+}
+
+/**
+ * sbi_get_mimpid() - get machine implementation ID
+ *
+ * @mimpid:	on return machine implementation ID
+ * Return:	0 on success
+ */
+int sbi_get_mimpid(long *mimpid)
+{
+	struct sbiret ret;
+
+	ret = sbi_ecall(SBI_EXT_BASE, SBI_EXT_BASE_GET_MIMPID,
+			0, 0, 0, 0, 0, 0);
+
+	if (ret.error)
+		return -ENOTSUPP;
+
+	if (mimpid)
+		*mimpid = ret.value;
+
+	return 0;
+}
+
+/**
+ * sbi_srst_reset() - invoke system reset extension
+ *
+ * @type:	type of reset
+ * @reason:	reason for reset
+ */
+void sbi_srst_reset(unsigned long type, unsigned long reason)
+{
+	sbi_ecall(SBI_EXT_SRST, SBI_EXT_SRST_RESET, type, reason,
+		  0, 0, 0, 0);
+}
+
+/**
+ * sbi_dbcn_write_byte() - write byte to debug console
+ *
+ * @ch:		byte to be written
+ * Return:	SBI error code (SBI_SUCCESS = 0 on success)
+ */
+int sbi_dbcn_write_byte(unsigned char ch)
+{
+	struct sbiret ret;
+
+	ret = sbi_ecall(SBI_EXT_DBCN,
+			SBI_EXT_DBCN_CONSOLE_WRITE_BYTE,
+			ch, 0, 0, 0, 0, 0);
+	return ret.error;
 }
 
 #ifdef CONFIG_SBI_V01
@@ -84,25 +265,6 @@ void sbi_clear_ipi(void)
 void sbi_shutdown(void)
 {
 	sbi_ecall(SBI_EXT_0_1_SHUTDOWN, 0, 0, 0, 0, 0, 0, 0);
-}
-
-#endif /* CONFIG_SBI_V01 */
-
-/**
- * sbi_set_timer() - Program the timer for next timer event.
- * @stime_value: The value after which next timer event should fire.
- *
- * Return: None
- */
-void sbi_set_timer(uint64_t stime_value)
-{
-#if __riscv_xlen == 32
-	sbi_ecall(SBI_EXT_SET_TIMER, SBI_FID_SET_TIMER, stime_value,
-		  stime_value >> 32, 0, 0, 0, 0);
-#else
-	sbi_ecall(SBI_EXT_SET_TIMER, SBI_FID_SET_TIMER, stime_value,
-		  0, 0, 0, 0, 0);
-#endif
 }
 
 /**
@@ -167,21 +329,4 @@ void sbi_remote_sfence_vma_asid(const unsigned long *hart_mask,
 		  (unsigned long)hart_mask, start, size, asid, 0, 0);
 }
 
-/**
- * sbi_probe_extension() - Check if an SBI extension ID is supported or not.
- * @extid: The extension ID to be probed.
- *
- * Return: Extension specific nonzero value f yes, -ENOTSUPP otherwise.
- */
-int sbi_probe_extension(int extid)
-{
-	struct sbiret ret;
-
-	ret = sbi_ecall(SBI_EXT_BASE, SBI_EXT_BASE_PROBE_EXT, extid,
-			0, 0, 0, 0, 0);
-	if (!ret.error)
-		if (ret.value)
-			return ret.value;
-
-	return -ENOTSUPP;
-}
+#endif /* CONFIG_SBI_V01 */

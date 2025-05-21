@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Copyright 2019-2020 NXP
+ * Copyright 2019-2023 NXP
  */
 
 #include <asm/mach-imx/sys_proto.h>
@@ -18,7 +18,7 @@
 #include <asm/arch/sys_proto.h>
 #include <asm/setup.h>
 #include <env.h>
-#ifdef CONFIG_DM_SCSI
+#ifdef CONFIG_SCSI
 #include <scsi.h>
 #endif
 
@@ -62,7 +62,7 @@ static ulong bootloader_mmc_offset(void)
 		else
 		/* target device is SD card, bootloader offset is 0x8000 */
 			return 0x8000;
-	} else if (is_imx8mn() || is_imx8mp() || is_imx8dxl()) {
+	} else if (is_imx8mn() || is_imx8mp() || is_imx8dxl() || is_imx8ulp() || is_imx9()) {
 		/* target device is eMMC boot0 partition, bootloader offset is 0x0 */
 		if (env_get_ulong("emmc_dev", 10, 2) == fastboot_devinfo.dev_id)
 			return 0;
@@ -94,7 +94,7 @@ static int _fastboot_parts_add_ptable_entry(int ptable_index,
 				      struct blk_desc *dev_desc,
 				      struct fastboot_ptentry *ptable)
 {
-	disk_partition_t info;
+	struct disk_partition info;
 
 	if (part_get_info(dev_desc,
 			       mmc_dos_partition_index, &info)) {
@@ -118,15 +118,16 @@ static int _fastboot_parts_add_ptable_entry(int ptable_index,
 	    !strcmp((const char *)info.name, FASTBOOT_PARTITION_OEM_A) ||
 	    !strcmp((const char *)info.name, FASTBOOT_PARTITION_VENDOR_A) ||
 	    !strcmp((const char *)info.name, FASTBOOT_PARTITION_OEM_B) ||
-	    !strcmp((const char *)info.name, FASTBOOT_PARTITION_VENDOR_B) ||
-	    !strcmp((const char *)info.name, FASTBOOT_PARTITION_DATA))
+	    !strcmp((const char *)info.name, FASTBOOT_PARTITION_VENDOR_B))
 #else
 	if (!strcmp((const char *)info.name, FASTBOOT_PARTITION_SYSTEM) ||
-	    !strcmp((const char *)info.name, FASTBOOT_PARTITION_DATA) ||
 	    !strcmp((const char *)info.name, FASTBOOT_PARTITION_DEVICE) ||
 	    !strcmp((const char *)info.name, FASTBOOT_PARTITION_CACHE))
 #endif
-		strcpy(ptable[ptable_index].fstype, "ext4");
+		strcpy(ptable[ptable_index].fstype, "erofs");
+	else if (!strcmp((const char *)info.name, FASTBOOT_PARTITION_DATA) ||
+	         !strcmp((const char *)info.name, FASTBOOT_PARTITION_METADATA))
+		strcpy(ptable[ptable_index].fstype, "f2fs");
 	else
 		strcpy(ptable[ptable_index].fstype, "raw");
 	return 0;
@@ -141,13 +142,15 @@ static int _fastboot_parts_load_from_ptable(void)
 	int boot_partition = FASTBOOT_MMC_NONE_PARTITION_ID;
 	int user_partition = FASTBOOT_MMC_NONE_PARTITION_ID;
 
+	unsigned long boot_loader_psize = ANDROID_BOOTLOADER_SIZE;
+
 	struct mmc *mmc;
 	struct blk_desc *dev_desc;
 	struct fastboot_ptentry ptable[MAX_PTN];
 
 	/* sata case in env */
 	if (fastboot_devinfo.type == DEV_SATA) {
-#ifdef CONFIG_DM_SCSI
+#ifdef CONFIG_SCSI
 		int sata_device_no = fastboot_devinfo.dev_id;
 		puts("flash target is SATA\n");
 		scsi_scan(false);
@@ -183,6 +186,7 @@ static int _fastboot_parts_load_from_ptable(void)
 		if (mmc->part_config != MMCPART_NOAVAILABLE) {
 			boot_partition = FASTBOOT_MMC_BOOT_PARTITION_ID;
 			user_partition = FASTBOOT_MMC_USER_PARTITION_ID;
+			boot_loader_psize = mmc->capacity_boot;
 		}
 	} else {
 		printf("Can't setup partition table on this device %d\n",
@@ -213,7 +217,7 @@ static int _fastboot_parts_load_from_ptable(void)
 #ifdef CONFIG_FLASH_MCUFIRMWARE_SUPPORT
 	strcpy(ptable[PTN_MCU_OS_INDEX].name, FASTBOOT_MCU_FIRMWARE_PARTITION);
 	ptable[PTN_MCU_OS_INDEX].start = ANDROID_MCU_FIRMWARE_START / dev_desc->blksz;
-	ptable[PTN_MCU_OS_INDEX].length = ANDROID_MCU_FIRMWARE_SIZE / dev_desc->blksz;
+	ptable[PTN_MCU_OS_INDEX].length = ANDROID_MCU_OS_PARTITION_SIZE / dev_desc->blksz;
 	ptable[PTN_MCU_OS_INDEX].flags = FASTBOOT_PTENTRY_FLAGS_UNERASEABLE;
 	ptable[PTN_MCU_OS_INDEX].partition_id = user_partition;
 	strcpy(ptable[PTN_MCU_OS_INDEX].fstype, "raw");
@@ -230,7 +234,8 @@ static int _fastboot_parts_load_from_ptable(void)
 	ptable[PTN_BOOTLOADER_INDEX].start =
 				bootloader_mmc_offset() / dev_desc->blksz;
 	ptable[PTN_BOOTLOADER_INDEX].length =
-				 ANDROID_BOOTLOADER_SIZE / dev_desc->blksz;
+				 boot_loader_psize / dev_desc->blksz;
+
 	ptable[PTN_BOOTLOADER_INDEX].partition_id = boot_partition;
 	ptable[PTN_BOOTLOADER_INDEX].flags = FASTBOOT_PTENTRY_FLAGS_UNERASEABLE;
 	strcpy(ptable[PTN_BOOTLOADER_INDEX].fstype, "raw");
@@ -275,7 +280,7 @@ void fastboot_flash_dump_ptn(void)
 	unsigned int n;
 	for (n = 0; n < g_pcount; n++) {
 		struct fastboot_ptentry *ptn = g_ptable + n;
-		printf("idx %d, ptn %d name='%s' start=%d len=%d\n",
+		printf("idx %d, ptn %d name='%s' start=%d len=%ld\n",
 			n, ptn->partition_index, ptn->name, ptn->start, ptn->length);
 	}
 }
@@ -352,7 +357,7 @@ bool fastboot_parts_is_raw(struct fastboot_ptentry *ptn)
 	 return false;
 }
 
-static bool is_exist(char (*partition_base_name)[16], char *buffer, int count)
+static bool is_exist(char (*partition_base_name)[20], char *buffer, int count)
 {
 	int n;
 
@@ -364,7 +369,7 @@ static bool is_exist(char (*partition_base_name)[16], char *buffer, int count)
 }
 
 /*get partition base name from gpt without "_a/_b"*/
-int fastboot_parts_get_name(char (*partition_base_name)[16])
+int fastboot_parts_get_name(char (*partition_base_name)[20])
 {
 	int n = 0;
 	int count = 0;

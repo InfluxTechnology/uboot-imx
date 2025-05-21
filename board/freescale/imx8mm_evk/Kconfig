@@ -9,6 +9,10 @@ config SYS_VENDOR
 config SYS_CONFIG_NAME
 	default "imx8mm_evk"
 
-source "board/freescale/common/Kconfig"
+config IMX_CONFIG
+	default "board/freescale/imx8mm_evk/imximage-8mm.cfg"
+
+config IMX8M_1G_MEMORY
+	bool "imx8m 1GB memory size"
 
 endif

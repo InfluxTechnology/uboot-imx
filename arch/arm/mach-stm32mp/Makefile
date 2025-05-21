@@ -3,17 +3,18 @@
 # Copyright (C) 2018, STMicroelectronics - All Rights Reserved
 #
 
-obj-y += cpu.o
 obj-y += dram_init.o
 obj-y += syscon.o
-
-ifdef CONFIG_SPL_BUILD
-obj-y += spl.o
-else
 obj-y += bsec.o
-obj-$(CONFIG_CMD_STM32KEY) += cmd_stm32key.o
-obj-$(CONFIG_ARMV7_PSCI) += psci.o
-endif
+obj-y += soc.o
 
-obj-$(CONFIG_$(SPL_)DM_REGULATOR) += pwr_regulator.o
-obj-$(CONFIG_OF_SYSTEM_SETUP) += fdt.o
+obj-$(CONFIG_STM32MP15X) += stm32mp1/
+obj-$(CONFIG_STM32MP13X) += stm32mp1/
+obj-$(CONFIG_STM32MP25X) += stm32mp2/
+
+obj-$(CONFIG_STM32_ECDSA_VERIFY) += ecdsa_romapi.o
+ifndef CONFIG_SPL_BUILD
+obj-y += cmd_stm32prog/
+obj-$(CONFIG_CMD_STM32KEY) += cmd_stm32key.o
+obj-$(CONFIG_TFABOOT) += boot_params.o
+endif

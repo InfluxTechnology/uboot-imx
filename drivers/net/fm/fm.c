@@ -3,12 +3,15 @@
  * Copyright 2009-2011 Freescale Semiconductor, Inc.
  *	Dave Liu <daveliu@freescale.com>
  */
-#include <common.h>
 #include <env.h>
+#include <fs_loader.h>
+#include <image.h>
 #include <malloc.h>
 #include <asm/io.h>
+#include <dm/device_compat.h>
 #include <linux/errno.h>
 #include <u-boot/crc.h>
+#include <dm.h>
 
 #include "fm.h"
 #include <fsl_qe.h>		/* For struct qe_firmware */
@@ -22,7 +25,7 @@
 #include <asm/arch/cpu.h>
 #endif
 
-struct fm_muram muram[CONFIG_SYS_NUM_FMAN];
+struct fm_muram muram[CFG_SYS_NUM_FMAN];
 
 void *fm_muram_base(int fm_idx)
 {
@@ -63,9 +66,9 @@ static void fm_init_muram(int fm_idx, void *reg)
 	void *base = reg;
 
 	muram[fm_idx].base = base;
-	muram[fm_idx].size = CONFIG_SYS_FM_MURAM_SIZE;
+	muram[fm_idx].size = CFG_SYS_FM_MURAM_SIZE;
 	muram[fm_idx].alloc = base + FM_MURAM_RES_SIZE;
-	muram[fm_idx].top = base + CONFIG_SYS_FM_MURAM_SIZE;
+	muram[fm_idx].top = base + CFG_SYS_FM_MURAM_SIZE;
 }
 
 /*
@@ -351,7 +354,7 @@ static void fm_init_qmi(struct fm_qmi_common *qmi)
 
 /* Init common part of FM, index is fm num# like fm as above */
 #ifdef CONFIG_TFABOOT
-int fm_init_common(int index, struct ccsr_fman *reg)
+int fm_init_common(int index, struct ccsr_fman *reg, const char *firmware_name)
 {
 	int rc;
 	void *addr = NULL;
@@ -359,7 +362,8 @@ int fm_init_common(int index, struct ccsr_fman *reg)
 
 	if (src == BOOT_SOURCE_IFC_NOR) {
 		addr = (void *)(CONFIG_SYS_FMAN_FW_ADDR +
-				CONFIG_SYS_FSL_IFC_BASE);
+				CFG_SYS_FSL_IFC_BASE);
+#ifdef CONFIG_CMD_NAND
 	} else if (src == BOOT_SOURCE_IFC_NAND) {
 		size_t fw_length = CONFIG_SYS_QE_FMAN_FW_LENGTH;
 
@@ -372,18 +376,19 @@ int fm_init_common(int index, struct ccsr_fman *reg)
 			printf("NAND read of FMAN firmware at offset 0x%x failed %d\n",
 			       CONFIG_SYS_FMAN_FW_ADDR, rc);
 		}
+#endif
 	} else if (src == BOOT_SOURCE_QSPI_NOR) {
 		struct spi_flash *ucode_flash;
 
 		addr = malloc(CONFIG_SYS_QE_FMAN_FW_LENGTH);
 		int ret = 0;
 
-#ifdef CONFIG_DM_SPI_FLASH
+#if CONFIG_IS_ENABLED(DM_SPI_FLASH)
 		struct udevice *new;
 
 		/* speed and mode will be read from DT */
-		ret = spi_flash_probe_bus_cs(CONFIG_ENV_SPI_BUS,
-					     CONFIG_ENV_SPI_CS, 0, 0, &new);
+		ret = spi_flash_probe_bus_cs(CONFIG_SF_DEFAULT_BUS,
+					     CONFIG_SF_DEFAULT_CS, &new);
 
 		ucode_flash = dev_get_uclass_priv(new);
 #else
@@ -397,7 +402,7 @@ int fm_init_common(int index, struct ccsr_fman *reg)
 		} else {
 			ret = spi_flash_read(ucode_flash,
 					     CONFIG_SYS_FMAN_FW_ADDR +
-					     CONFIG_SYS_FSL_QSPI_BASE,
+					     CFG_SYS_FSL_QSPI_BASE,
 					     CONFIG_SYS_QE_FMAN_FW_LENGTH,
 					     addr);
 			if (ret)
@@ -444,10 +449,32 @@ int fm_init_common(int index, struct ccsr_fman *reg)
 	return fm_init_bmi(index, &reg->fm_bmi_common);
 }
 #else
-int fm_init_common(int index, struct ccsr_fman *reg)
+int fm_init_common(int index, struct ccsr_fman *reg, const char *firmware_name)
 {
 	int rc;
-#if defined(CONFIG_SYS_QE_FMAN_FW_IN_NOR)
+#if defined(CONFIG_SYS_QE_FMAN_FW_IN_FS)
+	struct udevice *fs_loader;
+	void *addr = malloc(CONFIG_SYS_QE_FMAN_FW_LENGTH);
+
+	if (!addr)
+		return -ENOMEM;
+
+	rc = get_fs_loader(&fs_loader);
+	if (rc) {
+		debug("could not get fs loader: %d\n", rc);
+		return rc;
+	}
+
+	if (!firmware_name)
+		firmware_name = "fman.itb";
+
+	rc = request_firmware_into_buf(fs_loader, firmware_name, addr,
+				       CONFIG_SYS_QE_FMAN_FW_LENGTH, 0);
+	if (rc < 0) {
+		debug("could not request %s: %d\n", firmware_name, rc);
+		return rc;
+	}
+#elif defined(CONFIG_SYS_QE_FMAN_FW_IN_NOR)
 	void *addr = (void *)CONFIG_SYS_FMAN_FW_ADDR;
 #elif defined(CONFIG_SYS_QE_FMAN_FW_IN_NAND)
 	size_t fw_length = CONFIG_SYS_QE_FMAN_FW_LENGTH;
@@ -465,12 +492,12 @@ int fm_init_common(int index, struct ccsr_fman *reg)
 	void *addr = malloc(CONFIG_SYS_QE_FMAN_FW_LENGTH);
 	int ret = 0;
 
-#ifdef CONFIG_DM_SPI_FLASH
+#if CONFIG_IS_ENABLED(DM_SPI_FLASH)
 	struct udevice *new;
 
 	/* speed and mode will be read from DT */
-	ret = spi_flash_probe_bus_cs(CONFIG_ENV_SPI_BUS, CONFIG_ENV_SPI_CS,
-				     0, 0, &new);
+	ret = spi_flash_probe_bus_cs(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
+				     &new);
 
 	ucode_flash = dev_get_uclass_priv(new);
 #else
@@ -508,6 +535,23 @@ int fm_init_common(int index, struct ccsr_fman *reg)
 	void *addr = NULL;
 #endif
 
+	rc = fit_check_format(addr, CONFIG_SYS_QE_FMAN_FW_LENGTH);
+	if (!rc) {
+		size_t unused;
+		const void *new_addr;
+
+		rc = fit_get_data_conf_prop(addr, "fman", &new_addr, &unused);
+		if (rc)
+			return rc;
+		addr = (void *)new_addr;
+	} else if (CONFIG_IS_ENABLED(FIT_SIGNATURE)) {
+		/*
+		 * Using a (signed) FIT wrapper is mandatory if we are
+		 * doing verified boot.
+		 */
+		return rc;
+	}
+
 	/* Upload the Fman microcode if it's present */
 	rc = fman_upload_firmware(index, &reg->fm_imem, addr);
 	if (rc)
@@ -527,3 +571,86 @@ int fm_init_common(int index, struct ccsr_fman *reg)
 	return fm_init_bmi(index, &reg->fm_bmi_common);
 }
 #endif
+
+struct fman_priv {
+	struct ccsr_fman *reg;
+	unsigned int fman_id;
+};
+
+static const struct udevice_id fman_ids[] = {
+	{ .compatible = "fsl,fman" },
+	{}
+};
+
+static int fman_probe(struct udevice *dev)
+{
+	const char *firmware_name = NULL;
+	int ret;
+	struct fman_priv *priv = dev_get_priv(dev);
+
+	priv->reg = (struct ccsr_fman *)(uintptr_t)dev_read_addr(dev);
+
+	if (dev_read_u32(dev, "cell-index", &priv->fman_id)) {
+		printf("FMan node property cell-index missing\n");
+		return -EINVAL;
+	}
+
+	ret = dev_read_string_index(dev, "firmware-name", 0, &firmware_name);
+	if (ret && ret != -EINVAL) {
+		dev_dbg(dev, "Could not read firmware-name\n");
+		return ret;
+	}
+
+	return fm_init_common(priv->fman_id, priv->reg, firmware_name);
+}
+
+static int fman_remove(struct udevice *dev)
+{
+	return 0;
+}
+
+int fman_id(struct udevice *dev)
+{
+	struct fman_priv *priv = dev_get_priv(dev);
+
+	return priv->fman_id;
+}
+
+void *fman_port(struct udevice *dev, int num)
+{
+	struct fman_priv *priv = dev_get_priv(dev);
+
+	return &priv->reg->port[num - 1].fm_bmi;
+}
+
+void *fman_mdio(struct udevice *dev, enum fm_mac_type type, int num)
+{
+	struct fman_priv *priv = dev_get_priv(dev);
+	void *res = NULL;
+
+	switch (type) {
+#ifdef CONFIG_SYS_FMAN_V3
+	case FM_MEMAC:
+		res = &priv->reg->memac[num].fm_memac_mdio;
+		break;
+#else
+	case FM_DTSEC:
+		res = &priv->reg->mac_1g[num].fm_mdio.miimcfg;
+		break;
+	case FM_TGEC:
+		res = &priv->reg->mac_10g[num].fm_10gec_mdio;
+		break;
+#endif
+	}
+	return res;
+}
+
+U_BOOT_DRIVER(fman) = {
+	.name = "fman",
+	.id = UCLASS_SIMPLE_BUS,
+	.of_match = fman_ids,
+	.probe = fman_probe,
+	.remove = fman_remove,
+	.priv_auto	= sizeof(struct fman_priv),
+	.flags = DM_FLAG_ALLOC_PRIV_DMA,
+};
