@@ -1107,7 +1107,9 @@ dtb-$(CONFIG_ARCH_IMX8) += \
 	fsl-imx8dxl-evk-lcdif.dtb \
 	fsl-imx8dxl-ddr3l-evk.dtb \
 	imx8-deneb.dtb \
-	imx8-giedi.dtb
+	imx8-giedi.dtb \
+    	imx8mm-influx-rex-smart_v2.dtb \
+    	imx8mn-influx-rex-smart_v2.dtb 
 
 dtb-$(CONFIG_ARCH_IMX8ULP) += \
 	imx8ulp-evk.dtb \
