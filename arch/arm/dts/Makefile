@@ -1003,7 +1003,10 @@ endif
 
 dtb-$(CONFIG_MX6SL) += imx6sl-evk.dtb
 
-dtb-$(CONFIG_MX6SLL) += imx6sll-evk.dtb
+dtb-$(CONFIG_MX6SLL) += imx6sll-evk.dtb \
+	imx6sll-lpddr2-val.dtb \
+	imx6sll-lpddr3-val.dtb \
+	imx6sll-lpddr3-val-ecspi.dtb
 
 dtb-$(CONFIG_MX6SX) += \
 	imx6sx-sabreauto.dtb \
@@ -1107,9 +1110,7 @@ dtb-$(CONFIG_ARCH_IMX8) += \
 	fsl-imx8dxl-evk-lcdif.dtb \
 	fsl-imx8dxl-ddr3l-evk.dtb \
 	imx8-deneb.dtb \
-	imx8-giedi.dtb \
-    	imx8mm-influx-rex-smart_v2.dtb \
-    	imx8mn-influx-rex-smart_v2.dtb 
+	imx8-giedi.dtb
 
 dtb-$(CONFIG_ARCH_IMX8ULP) += \
 	imx8ulp-evk.dtb \
@@ -1183,7 +1184,11 @@ dtb-$(CONFIG_ARCH_IMX8M) += \
 	imx8mp-navqp.dtb \
 	imx8mq-pico-pi.dtb \
 	imx8mq-kontron-pitx-imx8m.dtb \
-	imx8mq-librem5-r4.dtb
+	imx8mq-librem5-r4.dtb \
+	imx8mm-ea-ucom-kit_v2.dtb \
+	imx8mn-ea-ucom-kit_v2.dtb \
+    imx8mm-influx-rex-smart_v2.dtb \
+    imx8mn-influx-rex-smart_v2.dtb 
 
 dtb-$(CONFIG_ARCH_IMX9) += \
 	imx95-15x15-evk.dtb \
