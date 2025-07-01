@@ -46,6 +46,33 @@
 		compatible = "samsung,sec-mipi-dsi";
 		status = "okay";
 	};
+
+        gpio-leds {
+                compatible = "gpio-leds";
+                pinctrl-names = "default";
+                pinctrl-0 = <&pinctrl_gpio_leds>;
+
+                // these pins are used by Quectel LTE
+                vcc_pin {
+                        label = "lte_VCC";
+                        gpios = <&gpio1 0 GPIO_ACTIVE_LOW>;
+                };
+
+                pwr_on_pin {
+                        label = "lte_PWR_ON";
+                        gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+                };
+
+                reset_pin {
+                        label = "lte_RESET";
+                        gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
+                };
+
+                usb_ena_pin {
+                        label = "lte_USB_ENA";
+                        gpios = <&gpio1 15 GPIO_ACTIVE_LOW>;
+                };
+	};
 };
 
 &A53_0 {
@@ -398,6 +425,16 @@
 	pinctrl-0 = <&pinctrl_hog_1>;
 
 	imx8mm-influx-rex-smart {
+
+		pinctrl_gpio_leds: gpio_ledsgrp {
+			fsl,pins = <
+                                MX8MM_IOMUXC_GPIO1_IO00_GPIO1_IO0       0x140   //JB02
+                                MX8MM_IOMUXC_GPIO1_IO06_GPIO1_IO6       0x140   //JB08
+                                MX8MM_IOMUXC_GPIO1_IO09_GPIO1_IO9       0x140   //JB14
+                                MX8MM_IOMUXC_GPIO1_IO15_GPIO1_IO15      0x140   //JB59
+                        >;
+                };
+
 		pinctrl_hog_1: hoggrp-1 {
 			fsl,pins = <
 				MX8MM_IOMUXC_GPIO1_IO08_GPIO1_IO8		0x19
