@@ -88,7 +88,7 @@
 	"mmcpart=1\0" \
 	"mmcroot=" CFG_MMCROOT " rootwait rw\0" \
 	"mmcautodetect=yes\0" \
-	"mmcargs=setenv bootargs ${jh_clk} console=${console} root=${mmcroot} " \
+	"mmcargs=setenv bootargs ${jh_clk} console=${console} " \
 		"${args_from_script}\0" \
 	"loadbootscript=fatload mmc ${mmcdev}:${mmcpart} ${loadaddr} ${bsp_script};\0" \
 	"bootscript=echo Running bootscript from mmc ...; " \
@@ -107,7 +107,7 @@
 			"echo wait for boot; " \
 		"fi;\0" \
 	"netargs=setenv bootargs ${jh_clk} console=${console} " \
-		"root=/dev/nfs " \
+		"" \
 		"${args_from_script}\0" \
 		"ip=dhcp nfsroot=${serverip}:${nfsroot},v3,tcp\0" \
 	"netboot=echo Booting from net ...; " \
