@@ -73,7 +73,7 @@
 	"kernel_addr_r=" __stringify(CONFIG_SYS_LOAD_ADDR) "\0" \
 	M_CORE_ENV \
 	"bsp_script=boot.scr\0" \
-	"image=Image\0" \
+	"image=boot/Image\0" \
 	"splashimage=0x50000000\0" \
 	"console=ttymxc1,115200\0" \
 	"fdt_addr_r=0x43000000\0"		\
@@ -88,13 +88,13 @@
 	"mmcpart=1\0" \
 	"mmcroot=" CFG_MMCROOT " rootwait rw\0" \
 	"mmcautodetect=yes\0" \
-	"mmcargs=setenv bootargs ${jh_clk} console=${console} " \
+	"mmcargs=setenv bootargs ${jh_clk} console=${console} root=${mender_kernel_root} " \
 		"${args_from_script}\0" \
 	"loadbootscript=fatload mmc ${mmcdev}:${mmcpart} ${loadaddr} ${bsp_script};\0" \
 	"bootscript=echo Running bootscript from mmc ...; " \
 		"source\0" \
-	"loadimage=fatload mmc ${mmcdev}:${mmcpart} ${loadaddr} ${image}\0" \
-	"loadfdt=fatload mmc ${mmcdev}:${mmcpart} ${fdt_addr_r} ${fdt_file}\0" \
+	"loadimage=ext4load ${mender_uboot_root} ${loadaddr} ${image}\0" \
+	"loadfdt=ext4load ${mender_uboot_root} ${fdt_addr} ${fdt_file}\0" \
 	"mmcboot=echo Booting from mmc ...; " \
 		"run mmcargs; " \
 		"if test ${boot_fdt} = yes || test ${boot_fdt} = try; then " \
@@ -129,12 +129,13 @@
 		"fi;\0" \
 	"bsp_bootcmd=echo Running BSP bootcmd ...;" \
 		"mmc dev ${mmcdev}; if mmc rescan; then " \
-		   "if run loadbootscript; then " \
-			   "run bootscript; " \
-		   "else " \
+			   "run mender_setup; " \
 			   "if run loadimage; then " \
 				   "run mmcboot; " \
-			   "else run netboot; " \
+				   "run mender_try_to_recover; " \
+			   "else " \
+				   "run mender_try_to_recover; " \
+				   "run netboot; " \
 			   "fi; " \
 		   "fi; " \
 	   "fi;"
@@ -143,6 +144,16 @@
 
 #define CFG_SYS_INIT_RAM_ADDR        0x40000000
 #define CFG_SYS_INIT_RAM_SIZE        0x200000
+
+/*#if defined(CONFIG_ENV_IS_IN_MMC)*/
+/* Use mender default instead */
+/*#define CONFIG_ENV_OFFSET		(SZ_2M - CONFIG_ENV_SIZE)*/
+/*#endif*/
+
+/* Use mender default instead */
+/*#define CONFIG_ENV_SIZE			SZ_8K*/
+/*#define CONFIG_SYS_MMC_ENV_DEV		1   /* USDHC2 */
+/*#define CONFIG_SYS_MMC_ENV_PART		0   /* 0=user area, 1=1st MMC boot part., 2=2nd MMC boot part. */
 
 #define CFG_MMCROOT			"/dev/mmcblk2p2"  /* USDHC2 */
 
