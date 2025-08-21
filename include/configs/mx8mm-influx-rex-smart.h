@@ -152,8 +152,8 @@
 
 /* Use mender default instead */
 /*#define CONFIG_ENV_SIZE			SZ_8K*/
-/*#define CONFIG_SYS_MMC_ENV_DEV		1   /* USDHC2 */
-/*#define CONFIG_SYS_MMC_ENV_PART		0   /* 0=user area, 1=1st MMC boot part., 2=2nd MMC boot part. */
+#define CONFIG_SYS_MMC_ENV_DEV		2   /* USDHC2 */
+#define CONFIG_SYS_MMC_ENV_PART		0   /* 0=user area, 1=1st MMC boot part., 2=2nd MMC boot part. */
 
 #define CFG_MMCROOT			"/dev/mmcblk2p2"  /* USDHC2 */
 
