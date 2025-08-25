@@ -127,7 +127,7 @@
 		"else " \
 			"booti; " \
 		"fi;\0" \
-	"bsp_bootcmd=echo Running BSP bootcmd ...;" \
+	"bootcmd=echo Running BSP bootcmd ...;" \
 		"mmc dev ${mmcdev}; if mmc rescan; then " \
 			   "run mender_setup; " \
 			   "if run loadimage; then " \
