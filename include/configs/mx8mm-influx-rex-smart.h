@@ -80,7 +80,8 @@
 	"fdt_addr=0x43000000\0"			\
 	"fdt_high=0xffffffffffffffff\0"		\
 	"boot_fdt=try\0" \
-	"fdt_file=\0" \
+	"fdt_file=boot/imx8mm-influx-rex-smart_v2-1mw.dtb\0" \
+	"mender_dtb_name=boot/imx8mm-influx-rex-smart_v2-1mw.dtb\0" \
 	"bootm_size=0x10000000\0" \
 	"initrd_addr=0x43800000\0"		\
 	"initrd_high=0xffffffffffffffff\0" \
